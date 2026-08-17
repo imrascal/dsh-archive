@@ -72,15 +72,24 @@ scripts/        eval-check.mjs（客户端 factory 求值校验）与 host-logic
 
 ## 兼容性
 
-- 目标 DSH：`0.1.0-rc.5` 起（含 rc.6 / rc.7 及以后版本；宿主半有 shape 保护，遇到不认识的
-  服务形态会安全跳过并打日志，不会拖垮应用）。
+- 目标 DSH：`0.1.0-rc.5` 起，同时兼容**原生 Web UI**（`dsh web` 浏览器访问）与**桌面版 GUI**
+  （Electron 窗口）——两者共用同一套宿主服务与客户端 bundle，一份实现双端生效。
+- 原版宿主（rc.5 未打补丁 / rc.6）：宿主半运行时补齐回收站层与 registry API；客户端走
+  `/dsh-archive/session` 降级接口。
+- 自带该功能的宿主——rc.5 打了内置补丁的，以及 **rc.7+（上游已原生合并同一套后端）**：所有
+  步骤自动检测并 no-op；客户端直连原生 `ctx.workspaces` API。原生能力**每次调用实时判定**，
+  服务晚到（rc.7 把 registry 放在 inject 门后）也会自动切回原生，不会永远卡在降级路径。
+- `deleteSession` 采用 **fail-closed**：persistence 不具备回收站能力时拒绝删除（不删任何东西），
+  插件永远不会驱动官方硬删除后端。
+- 宿主半对每个补丁都有形状守卫，遇到不认识的形态安全跳过并打日志，不会拖垮应用。
 - 平台：Windows / macOS / Linux（回收站为纯 Node `fs` 实现，无平台假设）。
 
 ## 开发
 
 ```bash
-node scripts/host-logic-test.mjs   # 宿主半全链路：删除→回收站→恢复→purge→清空→live 拒绝
-node scripts/eval-check.mjs        # 客户端 bundle factory 求值 + apply + 插槽注册校验
+node scripts/host-logic-test.mjs        # 宿主半全链路：删除→回收站→恢复→purge→清空→live 拒绝
+node scripts/host-robustness-test.mjs   # 晚到服务注入 + fail-closed 删除 + 路由按需补丁
+node scripts/eval-check.mjs             # 客户端 bundle 求值 + apply + 插槽注册 + 晚到服务实时判定
 ```
 
 ## License

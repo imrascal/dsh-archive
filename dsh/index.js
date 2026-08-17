@@ -1,26 +1,37 @@
 // DeepSeek Harness (dsh) plugin — host half of the archive-session manager.
 //
-// The feature ("存档会话管理") was originally developed as in-box patches to
-// dsh-workspace / dsh-session-persistence-jsonl / dsh-host-apiproxy (see the
-// `patches/` directory for the exact diffs). This plugin re-implements that
-// backend at runtime so it survives app updates and works on stock hosts:
-//
-//   1. Session persistence: when the installed `sessionPersistence` service
-//      has no trash support (stock builds delete outright), `remove()` is
-//      overridden to MOVE the session's directory into `$DSH_HOME/trash`
-//      instead of deleting it, and the trash list/restore/purge/empty methods
-//      are added. Deletes therefore stay reversible.
-//   2. Workspace registry: when `unarchiveSession` / `deleteSession` /
+// The feature ("存档会话管理") exists in two forms in the wild:
+//   * stock hosts (rc.5 unpatched, rc.6, ...): the backend is absent — the
+//     persistence backend deletes outright, the workspace registry has no
+//     archive/trash API, and the API proxy has no routes.
+//   * hosts with the feature (rc.5 with the in-box patches, rc.7+ where the
+//     upstream merged the feature): persistence has a native trash layer,
+//     the registry has unarchiveSession/deleteSession/trash*, and the API
+//     proxy has the routes.
+// This host half makes the backend available on BOTH kinds of host:
+//   1. `ensureTrashPersistence` — when the installed `sessionPersistence`
+//      service has no trash support, `remove()` is overridden to MOVE the
+//      session directory into `$DSH_HOME/trash` instead of deleting it, and
+//      trashList/trashRestore/trashPurge/trashEmpty are added. Deletes stay
+//      reversible.
+//   2. `ensureRegistryApi` — when `unarchiveSession` / `deleteSession` /
 //      `trashList` / `trashRestore` / `trashPurge` / `trashEmpty` are missing
 //      from the `workspaceRegistry` service, they are added, replicating the
-//      in-box implementation (live-session refusal, workspace accounting
-//      detach, archive-set cleanup, restore re-attach).
+//      upstream implementation (live-session refusal, workspace accounting
+//      detach, archive-set cleanup, restore re-attach). `deleteSession` is
+//      FAIL-CLOSED: it refuses to run unless the persistence layer is
+//      trash-aware, so a stock backend can never hard-delete a session.
 //   3. Fallback HTTP API (`/dsh-archive/session`): the browser half calls
 //      this when the client runtime lacks the native `ctx.workspaces`
-//      methods (e.g. after an update that reverted the client patches).
+//      methods. The route re-ensures the backend on demand, so a service
+//      that is provided late (rc.7 registers the registry behind an inject
+//      gate) is patched before the first request is served.
 //
-// Everything is feature-detected: on an already-patched host every step is a
-// no-op. All failures degrade to logs — never take the host down.
+// Everything is feature-detected: on a host that already has the feature
+// every step is a no-op. All failures degrade to logs — never take the host
+// down. The plugin targets both the native Web UI (`dsh web` in a browser)
+// and the desktop GUI (Electron window): they share the same host services
+// and the same client bundle, so one implementation serves both.
 //
 // Zero dependency stance: node builtins only, exactly like the host half of
 // the modlens plugin.
@@ -32,9 +43,9 @@ export const inject = []
 
 // ---------------------------------------------------------------------------
 // Module-private helpers replicated from dsh-session-persistence-jsonl so the
-// trash layout is byte-for-byte compatible with the in-box implementation
+// trash layout is byte-for-byte compatible with the native implementation
 // (`$DSH_HOME/trash/<encodedSessionId>-<movedAtMs>/`, headers parsed from the
-// first log line). Keep these in lockstep with `patches/`.
+// first log line). Keep these in lockstep with `patches/` and rc.7 upstream.
 // ---------------------------------------------------------------------------
 
 function isENOENT(error) {
@@ -267,11 +278,17 @@ function businessError(code, message, sessionId) {
 
 /**
  * Patch a WorkspaceRegistry-like service with the archive-manager API
- * (idempotent). Replicates the in-box implementation; `registry` exposes the
- * same instance members (enqueueOperation, requireState, setState,
+ * (idempotent). Replicates the upstream implementation; `registry` exposes
+ * the same instance members (enqueueOperation, requireState, setState,
  * sessionKnown, entities, headers, sessionPaths, invalidSessionPaths, ctx).
+ *
+ * `hooks.ensureTrash` (optional) re-runs the persistence trash patch; when it
+ * is provided, `deleteSession` attempts it before refusing. `deleteSession`
+ * is FAIL-CLOSED: if the persistence layer is not trash-aware after the
+ * attempt, the delete is refused with `unavailable` and nothing is removed —
+ * a stock (hard-delete) backend can never be driven by this plugin.
  */
-function ensureRegistryApi(registry, log) {
+function ensureRegistryApi(registry, log, hooks = {}) {
   if (!registry || typeof registry !== 'object') return false
   if (typeof registry.unarchiveSession === 'function') {
     log('[dsh-archive] workspaceRegistry already has the archive-manager API — nothing to patch')
@@ -280,6 +297,16 @@ function ensureRegistryApi(registry, log) {
   if (typeof registry.enqueueOperation !== 'function' || typeof registry.sessionKnown !== 'function') {
     log(`[dsh-archive] workspaceRegistry shape unrecognized (enqueueOperation=${typeof registry.enqueueOperation}, sessionKnown=${typeof registry.sessionKnown}) — skipping API patch`)
     return false
+  }
+  const ensureTrash = () => {
+    if (typeof hooks.ensureTrash !== 'function') return false
+    try {
+      hooks.ensureTrash()
+    } catch (error) {
+      /* logged by the caller of the hook */
+    }
+    const persistence = registry.ctx?.sessionPersistence
+    return persistence !== undefined && typeof persistence.trashList === 'function'
   }
 
   registry.unarchiveSession = function unarchiveSession(sessionId) {
@@ -298,6 +325,15 @@ function ensureRegistryApi(registry, log) {
 
   registry.deleteSession = function deleteSession(sessionId) {
     return this.enqueueOperation(async () => {
+      // Fail-closed: never drive a hard-delete backend. Ensure the trash
+      // layer first; refuse when it cannot be established.
+      if (!ensureTrash()) {
+        throw businessError(
+          'unavailable',
+          'trash backend unavailable — refusing to delete session (nothing was removed); the session-persistence service lacks trash support',
+          sessionId,
+        )
+      }
       if (this.ctx?.get('sessions')?.get(sessionId) !== undefined) {
         throw businessError('session-live', `cannot delete session '${sessionId}': the session is live; stop or detach it before deleting`, sessionId)
       }
@@ -346,7 +382,7 @@ function ensureRegistryApi(registry, log) {
     return this.ctx.sessionPersistence.trashEmpty()
   }
 
-  log('[dsh-archive] patched workspaceRegistry: unarchiveSession / deleteSession / trashList / trashRestore / trashPurge / trashEmpty added')
+  log('[dsh-archive] patched workspaceRegistry: unarchiveSession / deleteSession / trashList / trashRestore / trashPurge / trashEmpty added (deleteSession is fail-closed on the trash layer)')
   return true
 }
 
@@ -359,12 +395,17 @@ function writeJson(res, status, body) {
   res.end(JSON.stringify(body))
 }
 
-function registerHttpApi(ctx, log) {
-  if (!ctx.webServer || typeof ctx.webServer.register !== 'function') {
+/**
+ * Register the fallback HTTP route. `scope` is the webServer inject scope
+ * (has `.webServer`), `rootCtx` the plugin's apply ctx (service lookup +
+ * on-demand backend ensure), `ensureBackend` the idempotent patch pass.
+ */
+function registerHttpApi(scope, rootCtx, ensureBackend, log) {
+  if (!scope.webServer || typeof scope.webServer.register !== 'function') {
     log('[dsh-archive] webServer unavailable — skipping fallback HTTP API (headless profile?)')
     return
   }
-  ctx.webServer.register({
+  scope.webServer.register({
     name: 'dsh-archive-session',
     kind: 'exact',
     path: '/dsh-archive/session',
@@ -384,9 +425,13 @@ function registerHttpApi(ctx, log) {
       }
       const op = payload?.op
       const sessionId = typeof payload?.sessionId === 'string' ? payload.sessionId : undefined
-      const registry = ctx.get?.('workspaceRegistry') ?? ctx.workspaceRegistry
+      // On-demand backend ensure: services can be provided late (rc.7 gates
+      // the registry behind an inject), so re-run the idempotent patch pass
+      // before every request — it is a cheap no-op once applied.
+      ensureBackend()
+      const registry = rootCtx.get?.('workspaceRegistry') ?? rootCtx.workspaceRegistry
       if (!registry || typeof registry.trashList !== 'function') {
-        writeJson(res, 503, { ok: false, code: 'unavailable', message: 'workspace registry backend is not available' })
+        writeJson(res, 503, { ok: false, code: 'unavailable', message: 'workspace registry backend is not available yet' })
         return
       }
       try {
@@ -455,16 +500,32 @@ export function apply(ctx, config = {}) {
     }
   }
 
-  try {
-    ensureTrashPersistence(ctx.get?.('sessionPersistence'), log)
-  } catch (error) {
-    warn(`[dsh-archive] session-persistence trash patch failed: ${String(error)}`)
+  // One idempotent patch pass over both services. Safe to call repeatedly:
+  // each ensure* feature-detects and no-ops once applied.
+  const ensureBackend = () => {
+    try {
+      const persistence = ctx.get?.('sessionPersistence')
+      if (persistence) ensureTrashPersistence(persistence, log)
+    } catch (error) {
+      warn(`[dsh-archive] session-persistence trash patch failed: ${String(error)}`)
+    }
+    try {
+      const registry = ctx.get?.('workspaceRegistry') ?? ctx.workspaceRegistry
+      if (registry) {
+        ensureRegistryApi(registry, log, { ensureTrash: ensureBackend })
+      }
+    } catch (error) {
+      warn(`[dsh-archive] workspace-registry API patch failed: ${String(error)}`)
+    }
   }
 
-  try {
-    ensureRegistryApi(ctx.get?.('workspaceRegistry') ?? ctx.workspaceRegistry, log)
-  } catch (error) {
-    warn(`[dsh-archive] workspace-registry API patch failed: ${String(error)}`)
+  // Patch now if the services are already present...
+  ensureBackend()
+  // ...and again whenever they appear later (rc.7+ registers the registry
+  // behind an inject gate, so it may arrive after this plugin's apply).
+  if (typeof ctx.inject === 'function') {
+    ctx.inject(['sessionPersistence'], () => ensureBackend())
+    ctx.inject(['workspaceRegistry'], () => ensureBackend())
   }
 
   // The fallback HTTP API rides a scoped inject (webServer is optional and
@@ -472,7 +533,7 @@ export function apply(ctx, config = {}) {
   if (typeof ctx.inject === 'function') {
     ctx.inject(['webServer'], (scope) => {
       try {
-        registerHttpApi(scope, log)
+        registerHttpApi(scope, ctx, ensureBackend, log)
       } catch (error) {
         warn(`[dsh-archive] fallback HTTP API skipped: ${String(error)}`)
       }

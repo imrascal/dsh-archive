@@ -77,15 +77,27 @@ To migrate:
 
 ## Compatibility
 
-- Target DSH: `0.1.0-rc.5` and later (host half shape-guards every patch; unrecognized services are
-  skipped with a log line, never fatal).
+- Target DSH: `0.1.0-rc.5` and later — both the **native Web UI** (`dsh web` in a browser) and the
+  **desktop GUI** (Electron window), which share the same host services and client bundle.
+- Stock hosts (rc.5 unpatched, rc.6): the host half adds the trash layer and the registry API at
+  runtime; the client falls back to `/dsh-archive/session`.
+- Hosts that already carry the feature — rc.5 with the in-box patches, and **rc.7+ where upstream
+  merged the same backend** (persistence trash layer, registry `unarchiveSession/deleteSession/
+  trash*`, API-proxy routes, client-runtime methods): every step feature-detects and no-ops; the
+  client calls the native `ctx.workspaces` API directly. Service availability is checked per call,
+  so a service that is provided late (rc.7 gates the registry behind an inject) is picked up
+  automatically instead of stranding the section on the fallback path.
+- `deleteSession` is **fail-closed**: it refuses to run unless the persistence layer is trash-aware,
+  so the plugin can never drive a stock hard-delete backend (nothing is removed on refusal).
+- Host half shape-guards every patch; unrecognized services are skipped with a log line, never fatal.
 - Platform: Windows / macOS / Linux (trash is plain Node `fs`; no platform assumptions).
 
 ## Development
 
 ```bash
-node scripts/host-logic-test.mjs   # host lifecycle: delete → trash → restore → purge → empty → live refusal
-node scripts/eval-check.mjs        # client bundle factory eval + apply + slot registration
+node scripts/host-logic-test.mjs        # host lifecycle: delete → trash → restore → purge → empty → live refusal
+node scripts/host-robustness-test.mjs   # late service provision + fail-closed delete + route on-demand ensure
+node scripts/eval-check.mjs             # client bundle factory eval + apply + slot registration + late-service detection
 ```
 
 ## License

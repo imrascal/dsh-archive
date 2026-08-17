@@ -189,7 +189,11 @@ window.__ModuleLoader__.load({
     // ---------------------------------------------------------------------
     // Fallback HTTP client (used when the native ctx.workspaces API is absent)
     // ---------------------------------------------------------------------
-    function httpCall(payload) {
+    function httpCall(payload, attempt) {
+      attempt = attempt || 1
+      var delay = function () {
+        return new Promise(function (resolve) { setTimeout(resolve, 1000 * attempt) })
+      }
       return fetch('/dsh-archive/session', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -201,13 +205,29 @@ window.__ModuleLoader__.load({
           })
         })
         .then(function (body) {
-          if (body === null || body.ok !== true) {
-            var error = new Error(body && body.message ? body.message : 'operation failed')
-            error.code = body && body.code ? body.code : 'unknown'
-            throw error
+          if (body !== null && body.ok === true) return body.value
+          // Transient unavailability during app boot: the host's registry
+          // service may not be ready yet — retry briefly with backoff.
+          if (body && body.code === 'unavailable' && attempt < 3) {
+            return delay().then(function () { return httpCall(payload, attempt + 1) })
           }
-          return body.value
+          var error = new Error(body && body.message ? body.message : 'operation failed')
+          error.code = body && body.code ? body.code : 'unknown'
+          throw error
         })
+        .catch(function (error) {
+          // Network-level failures (route not yet mounted mid-restart) get the
+          // same bounded retry; business errors carry a code and surface at once.
+          if (attempt < 3 && !(error && error.code)) {
+            return delay().then(function () { return httpCall(payload, attempt + 1) })
+          }
+          throw error
+        })
+    }
+
+    /** Whether the native client-runtime API is present right now. */
+    function nativeTrash(ctx) {
+      return typeof ctx.workspaces === 'object' && ctx.workspaces !== null && typeof ctx.workspaces.trashList === 'function'
     }
 
     /** Best-effort resync of the session/workspace stores after a fallback op. */
@@ -392,7 +412,7 @@ window.__ModuleLoader__.load({
 
       // resync after a fallback-path action (no-op when the action was native)
       var resyncOnAction = function () {
-        if (nativeApi) return Promise.resolve()
+        if (nativeTrash(globalCtx)) return Promise.resolve()
         return resync(globalCtx)
       }
 
@@ -651,12 +671,9 @@ window.__ModuleLoader__.load({
     var inject = ['slots', 'sessions', 'workspaces', 'locale']
     // The shared ctx captured for fallback-path store resyncs (set in apply).
     var globalCtx = null
-    // Whether the native client-runtime API is present (computed at apply).
-    var nativeApi = false
 
     function apply(ctx) {
       globalCtx = ctx
-      nativeApi = typeof ctx.workspaces === 'object' && ctx.workspaces !== null && typeof ctx.workspaces.trashList === 'function'
       var t = ctx.locale.bind(NS)
       ctx.effect(function () { return ctx.locale.register(NS, { zh: zh, en: en }) }, 'dsh-archive: dictionaries')
       ctx.effect(function () {
@@ -689,24 +706,28 @@ window.__ModuleLoader__.load({
             label: function () { return t('nav') },
             locale: NS,
             inject: function () {
+              // Native availability is checked per call: the workspaces
+              // service can be provided late (rc.7 gates the client runtime
+              // behind injects), so freezing it at apply time would strand
+              // the section on the fallback path forever.
               return {
                 unarchiveSession: function (sessionId) {
-                  return nativeApi ? ctx.workspaces.unarchiveSession(sessionId) : httpCall({ op: 'unarchive', sessionId: sessionId })
+                  return nativeTrash(ctx) ? ctx.workspaces.unarchiveSession(sessionId) : httpCall({ op: 'unarchive', sessionId: sessionId })
                 },
                 deleteSession: function (sessionId) {
-                  return nativeApi ? ctx.workspaces.deleteSession(sessionId) : httpCall({ op: 'delete', sessionId: sessionId })
+                  return nativeTrash(ctx) ? ctx.workspaces.deleteSession(sessionId) : httpCall({ op: 'delete', sessionId: sessionId })
                 },
                 loadTrash: function () {
-                  return nativeApi ? ctx.workspaces.trashList() : httpCall({ op: 'trashList' }).then(function (value) { return value.items })
+                  return nativeTrash(ctx) ? ctx.workspaces.trashList() : httpCall({ op: 'trashList' }).then(function (value) { return value.items })
                 },
                 trashRestore: function (sessionId) {
-                  return nativeApi ? ctx.workspaces.trashRestore(sessionId) : httpCall({ op: 'trashRestore', sessionId: sessionId })
+                  return nativeTrash(ctx) ? ctx.workspaces.trashRestore(sessionId) : httpCall({ op: 'trashRestore', sessionId: sessionId })
                 },
                 trashPurge: function (sessionId) {
-                  return nativeApi ? ctx.workspaces.trashPurge(sessionId) : httpCall({ op: 'trashPurge', sessionId: sessionId })
+                  return nativeTrash(ctx) ? ctx.workspaces.trashPurge(sessionId) : httpCall({ op: 'trashPurge', sessionId: sessionId })
                 },
                 trashEmpty: function () {
-                  return nativeApi ? ctx.workspaces.trashEmpty() : httpCall({ op: 'trashEmpty' })
+                  return nativeTrash(ctx) ? ctx.workspaces.trashEmpty() : httpCall({ op: 'trashEmpty' })
                 }
               }
             }
