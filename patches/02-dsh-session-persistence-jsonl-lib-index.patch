@@ -1,0 +1,160 @@
+diff --git "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-session-persistence-jsonl\\package\\lib\\index.js" "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-session-persistence-jsonl\\lib\\index.js"
+index 66db7ec..38899b7 100644
+--- "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-session-persistence-jsonl\\package\\lib\\index.js"
++++ "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-session-persistence-jsonl\\lib\\index.js"	
+@@ -1,6 +1,6 @@
+ import z from "@deepseek-ai/schemastery";
+ import { readdirSync } from "node:fs";
+-import { link, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, stat, truncate } from "node:fs/promises";
+-import { dirname, join, parse, resolve, toNamespacedPath } from "node:path";
++import { link, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, truncate } from "node:fs/promises";
++import { basename, dirname, join, parse, resolve, toNamespacedPath } from "node:path";
+ import { performance } from "node:perf_hooks";
+ import { scheduler } from "node:timers/promises";
+@@ -1333,4 +1333,146 @@ var JsonlSessionPersistence = class extends SessionPersistence {
+ 		return matches[0];
+ 	}
++	/**
++	* Move one session's artifact directory (its log and any sidecar files)
++	* into the trash instead of deleting it. The session stays fully recoverable
++	* via {@link trashRestore} until the trash is purged or emptied. A session
++	* with no persisted artifact resolves without writing. Callers must
++	* guarantee the session is not live — the persistence coordinator refuses
++	* live removal.
++	* @param id - the session to move to the trash.
++	* @param signal - optional cancellation for the lookup.
++	* @returns resolution after the move.
++	*/
++	async remove(id, signal) {
++		const path = await this.findLog(id, signal);
++		if (path === void 0) return;
++		await this.moveToTrash(dirname(path));
++	}
++	/** The trash root: `$DSH_HOME/trash`, a sibling of this backend's sessions root (outside the project/session layout). */
++	trashRoot() {
++		return join(dirname(this.root), "trash");
++	}
++	/** Trash directory name for one session at a move time (id + timestamp avoids collisions). */
++	trashDirName(id, movedAt) {
++		return `${encodeSegment(id)}-${movedAt}`;
++	}
++	/** Move one absolute session directory into the trash with a fresh timestamped name. */
++	async moveToTrash(dir) {
++		const trashRoot = this.trashRoot();
++		await mkdir(trashRoot, { recursive: true });
++		const target = join(trashRoot, this.trashDirName(basename(dir), Date.now()));
++		await rename(dir, target);
++	}
++	/** Find one trashed session's directory by id, or undefined when absent. */
++	async findTrashDir(id, signal) {
++		const prefix = `${encodeSegment(id)}-`;
++		let entries;
++		try {
++			entries = await readdir(this.trashRoot(), { withFileTypes: true });
++		} catch (error) {
++			if (isENOENT(error)) return void 0;
++			throw error;
++		}
++		signal?.throwIfAborted();
++		const match = entries.find((entry) => entry.isDirectory() && entry.name.startsWith(prefix));
++		return match === void 0 ? void 0 : join(this.trashRoot(), match.name);
++	}
++	/**
++	* List trashed sessions with their stored headers.
++	* @param signal - optional cancellation.
++	* @returns rows `{ sessionId, cwd, createdAt, movedAt }` in trash-arrival order.
++	*/
++	async trashList(signal) {
++		const trashRoot = this.trashRoot();
++		let entries;
++		try {
++			entries = await readdir(trashRoot, { withFileTypes: true });
++		} catch (error) {
++			if (isENOENT(error)) return [];
++			throw error;
++		}
++		const rows = [];
++		for (const entry of entries) {
++			signal?.throwIfAborted();
++			if (!entry.isDirectory()) continue;
++			const dir = join(trashRoot, entry.name);
++			const path = join(dir, `session${logSuffix(this.compression)}`);
++			let first;
++			try {
++				first = this.compression === "zstd" ? await this.readFirstZstdLine(path, signal) : await this.readFirstLine(path, signal);
++			} catch {
++				continue;
++			}
++			if (first === void 0) continue;
++			const meta = parseHeaderMeta(first);
++			if (meta === void 0) continue;
++			const dash = entry.name.lastIndexOf("-");
++			const movedAt = Number(dash > 0 ? entry.name.slice(dash + 1) : NaN);
++			rows.push({
++				sessionId: meta.id,
++				cwd: meta.cwd,
++				createdAt: meta.createdAt,
++				movedAt: Number.isFinite(movedAt) && movedAt > 0 ? movedAt : (await stat(dir)).mtimeMs
++			});
++		}
++		return rows;
++	}
++	/**
++	* Restore one trashed session: move its directory back into the project/session
++	* layout under its stored cwd.
++	* @param id - the trashed session to restore.
++	* @param signal - optional cancellation.
++	* @returns the stored header meta, or undefined when the session is not trashed.
++	*/
++	async trashRestore(id, signal) {
++		const dir = await this.findTrashDir(id, signal);
++		if (dir === void 0) return void 0;
++		const path = join(dir, `session${logSuffix(this.compression)}`);
++		const first = this.compression === "zstd" ? await this.readFirstZstdLine(path, signal) : await this.readFirstLine(path, signal);
++		if (first === void 0) return void 0;
++		const meta = parseHeaderMeta(first);
++		if (meta === void 0) return void 0;
++		const target = sessionDir(this.root, meta.cwd, meta.id);
++		await mkdir(dirname(target), { recursive: true });
++		await rename(dir, target);
++		return meta;
++	}
++	/**
++	* Permanently delete one trashed session's directory.
++	* @param id - the trashed session to purge.
++	* @param signal - optional cancellation.
++	* @returns resolution after removal (no-op when not trashed).
++	*/
++	async trashPurge(id, signal) {
++		const dir = await this.findTrashDir(id, signal);
++		if (dir === void 0) return;
++		await rm(dir, {
++			recursive: true,
++			force: true
++		});
++	}
++	/**
++	* Permanently delete every trashed session directory.
++	* @param signal - optional cancellation.
++	* @returns resolution after removal.
++	*/
++	async trashEmpty(signal) {
++		const trashRoot = this.trashRoot();
++		let entries;
++		try {
++			entries = await readdir(trashRoot, { withFileTypes: true });
++		} catch (error) {
++			if (isENOENT(error)) return;
++			throw error;
++		}
++		for (const entry of entries) {
++			signal?.throwIfAborted();
++			if (!entry.isDirectory()) continue;
++			await rm(join(trashRoot, entry.name), {
++				recursive: true,
++				force: true
++			});
++		}
++	}
+ 	/** Require an existing configured root to be a readable directory. */
+ 	assertUsableRoot() {

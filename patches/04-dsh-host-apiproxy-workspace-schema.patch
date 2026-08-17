@@ -1,0 +1,54 @@
+diff --git "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-host-apiproxy\\package\\lib\\types\\api\\workspace.schema.js" "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-host-apiproxy\\lib\\types\\api\\workspace.schema.js"
+index 1752304..3067847 100644
+--- "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-host-apiproxy\\package\\lib\\types\\api\\workspace.schema.js"
++++ "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-host-apiproxy\\lib\\types\\api\\workspace.schema.js"	
+@@ -76,3 +76,48 @@ export const workspaceArchiveSessionValueSchema = z.object({
+     archivedSessionIds: z.array(sessionIdSchema),
+ });
++/** workspace.unarchiveSession request payload. */
++export const workspaceUnarchiveSessionRequestSchema = z.object({
++    sessionId: sessionIdSchema,
++});
++/** workspace.unarchiveSession response value: the full updated archive set. */
++export const workspaceUnarchiveSessionValueSchema = z.object({
++    archivedSessionIds: z.array(sessionIdSchema),
++});
++/** workspace.deleteSession request payload. */
++export const workspaceDeleteSessionRequestSchema = z.object({
++    sessionId: sessionIdSchema,
++});
++/** workspace.deleteSession response value. */
++export const workspaceDeleteSessionValueSchema = z.object({
++    deleted: z.literal(true),
++});
++/** workspace.trashList response value. */
++export const workspaceTrashListValueSchema = z.object({
++    items: z.array(z.object({
++        sessionId: sessionIdSchema,
++        cwd: z.string(),
++        createdAt: z.number(),
++        movedAt: z.number(),
++    })),
++});
++/** workspace.trashRestore request payload. */
++export const workspaceTrashRestoreRequestSchema = z.object({
++    sessionId: sessionIdSchema,
++});
++/** workspace.trashRestore response value. */
++export const workspaceTrashRestoreValueSchema = z.object({
++    restored: z.literal(true),
++});
++/** workspace.trashPurge request payload. */
++export const workspaceTrashPurgeRequestSchema = z.object({
++    sessionId: sessionIdSchema,
++});
++/** workspace.trashPurge response value. */
++export const workspaceTrashPurgeValueSchema = z.object({
++    purged: z.literal(true),
++});
++/** workspace.trashEmpty response value. */
++export const workspaceTrashEmptyValueSchema = z.object({
++    purged: z.literal(true),
++});
+ //# sourceMappingURL=workspace.schema.js.map
+\ No newline at end of file

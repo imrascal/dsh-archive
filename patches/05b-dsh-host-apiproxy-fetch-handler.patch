@@ -1,0 +1,22 @@
+diff --git "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-host-apiproxy\\package\\lib\\types\\fetch\\handler.js" "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-host-apiproxy\\lib\\types\\fetch\\handler.js"
+index 9d72e02..831bef4 100644
+--- "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-host-apiproxy\\package\\lib\\types\\fetch\\handler.js"
++++ "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-host-apiproxy\\lib\\types\\fetch\\handler.js"	
+@@ -12,5 +12,5 @@ import { clientRequestSchema, clientResponseSchema } from "../api/rpc.schema.js"
+ import { sessionCancelRequestSchema, sessionAttachmentRequestSchema, sessionCreateRequestSchema, sessionForkRequestSchema, sessionHistoryRequestSchema, sessionListRequestSchema, sessionModelsRequestSchema, sessionPromptRequestSchema, sessionRenameRequestSchema, sessionSearchRequestSchema, sessionSelectModelRequestSchema, sessionUpdateQueueRequestSchema, } from "../api/sessions.schema.js";
+ import { hostCreateDirectoryRequestSchema, hostDescribeRequestSchema, hostListDirectoryRequestSchema, hostOpenPathRequestSchema, hostPickDirectoryRequestSchema, } from "../api/host.schema.js";
+-import { workspaceArchiveSessionRequestSchema, workspaceCreateRequestSchema, workspaceDeleteRequestSchema, workspaceInsertBeforeRequestSchema, workspaceInsertSessionBeforeRequestSchema, workspaceListRequestSchema, workspaceRenameRequestSchema, } from "../api/workspace.schema.js";
++import { workspaceArchiveSessionRequestSchema, workspaceCreateRequestSchema, workspaceDeleteRequestSchema, workspaceDeleteSessionRequestSchema, workspaceInsertBeforeRequestSchema, workspaceInsertSessionBeforeRequestSchema, workspaceListRequestSchema, workspaceRenameRequestSchema, workspaceTrashRestoreRequestSchema, workspaceTrashPurgeRequestSchema, workspaceUnarchiveSessionRequestSchema, } from "../api/workspace.schema.js";
+ import { skillListRequestSchema } from "../api/skills.schema.js";
+ import { agentPresetCopyRequestSchema, agentPresetListRequestSchema, agentPresetOpenDocumentRequestSchema, agentPresetReadRequestSchema, agentPresetRemoveRequestSchema, agentPresetSelectRequestSchema, } from "../api/agent-presets.schema.js";
+@@ -49,4 +49,10 @@ const UNARY_ROUTES = {
+     'workspace.insertSessionBefore': { schema: workspaceInsertSessionBeforeRequestSchema, invoke: (api, r) => api.workspace.insertSessionBefore(r) },
+     'workspace.archiveSession': { schema: workspaceArchiveSessionRequestSchema, invoke: (api, r) => api.workspace.archiveSession(r) },
++    'workspace.unarchiveSession': { schema: workspaceUnarchiveSessionRequestSchema, invoke: (api, r) => api.workspace.unarchiveSession(r) },
++    'workspace.deleteSession': { schema: workspaceDeleteSessionRequestSchema, invoke: (api, r) => api.workspace.deleteSession(r) },
++    'workspace.trashList': { schema: workspaceListRequestSchema, invoke: (api, r) => api.workspace.trashList(r) },
++    'workspace.trashRestore': { schema: workspaceTrashRestoreRequestSchema, invoke: (api, r) => api.workspace.trashRestore(r) },
++    'workspace.trashPurge': { schema: workspaceTrashPurgeRequestSchema, invoke: (api, r) => api.workspace.trashPurge(r) },
++    'workspace.trashEmpty': { schema: workspaceListRequestSchema, invoke: (api, r) => api.workspace.trashEmpty(r) },
+     'skill.list': { schema: skillListRequestSchema, invoke: (api, r) => api.skills.list(r) },
+     'agentPreset.list': { schema: agentPresetListRequestSchema, invoke: (api, r) => api.agentPresets.list(r) },

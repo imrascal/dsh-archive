@@ -1,0 +1,147 @@
+diff --git "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-host-apiproxy\\package\\lib\\types\\api-proxy.js" "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-host-apiproxy\\lib\\types\\api-proxy.js"
+index 44f1a61..526cc52 100644
+--- "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-host-apiproxy\\package\\lib\\types\\api-proxy.js"
++++ "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-host-apiproxy\\lib\\types\\api-proxy.js"	
+@@ -14,5 +14,5 @@ import { SessionQueryError } from '@deepseek-ai/dsh-session-query';
+ import { SubagentError } from '@deepseek-ai/dsh-subagent';
+ import { isUserInvocable } from '@deepseek-ai/dsh-skill';
+-import { workspaceDomainState, workspaceRecord, WorkspaceId as brandWorkspaceId, WorkspaceMoveInvalidError, WorkspaceOrderInvalidError, WorkspaceUnknownSessionError, } from '@deepseek-ai/dsh-workspace';
++import { workspaceDomainState, workspaceRecord, WorkspaceId as brandWorkspaceId, WorkspaceLiveSessionError, WorkspaceMoveInvalidError, WorkspaceOrderInvalidError, WorkspaceUnknownSessionError, } from '@deepseek-ai/dsh-workspace';
+ // Type-only: brings the `ctx.tools` Context merge into this program (viewFor reads presenters).
+ import { InvalidPresetIdError, PresetExistsError, PresetMountError, PresetNotWritableError, resolveSessionPreset, SETTINGS_NAMESPACE as AGENT_PRESET_SETTINGS_NAMESPACE, UnknownPresetError, } from '@deepseek-ai/dsh-agent-presets';
+@@ -893,4 +893,6 @@ export function createApiProxy(ctx, defaults) {
+     /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
+     const sessionCreations = new Map();
++    /** Live-session teardown handles retained at ensure-time; archive closes them so archived sessions become cold. */
++    const sessionClosers = new Map();
+     /** Serializes path ownership and explicit title checks with Workspace mutations. */
+     let workspaceCreationChain = Promise.resolve();
+@@ -1388,9 +1390,11 @@ export function createApiProxy(ctx, defaults) {
+                     // rebuilding it differently would replay tool calls the model can no
+                     // longer make.
+-                    return (await ctx.agents.resume({
++                    const handle = await ctx.agents.resume({
+                         resumeSessionId: sessionId,
+                         agentOptions: agentOptions(),
+                         setup: (await composeAgent(storedPreset)).setup,
+-                    })).agent;
++                    });
++                    sessionClosers.set(sessionId, handle.dispose);
++                    return handle.agent;
+                 }
+                 try {
+@@ -1401,5 +1405,5 @@ export function createApiProxy(ctx, defaults) {
+                 }
+                 const composition = await composeAgent(presetId);
+-                return (await ctx.agents.create({
++                const handle = await ctx.agents.create({
+                     sessionId,
+                     agentOptions: agentOptions(),
+@@ -1409,5 +1413,7 @@ export function createApiProxy(ctx, defaults) {
+                     },
+                     setup: composition.setup,
+-                })).agent;
++                });
++                sessionClosers.set(sessionId, handle.dispose);
++                return handle.agent;
+             })().catch((error) => {
+                 // Another Host entry path may have published the same identity while
+@@ -2634,6 +2640,90 @@ export function createApiProxy(ctx, defaults) {
+                     });
+                 }
++                // Archiving deactivates the session: close its live agent so the
++                // archived session is cold (deletable, no background work). The
++                // teardown flushes, cancels the loop, and detaches the session.
++                const close = sessionClosers.get(sessionId);
++                if (close !== undefined) {
++                    sessionClosers.delete(sessionId);
++                    try {
++                        await close();
++                    }
++                    catch (error) {
++                        ctx.logger.warn(`archive: closing live session "${sessionId}" failed: ${String(error)}`);
++                    }
++                }
++                return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] });
++            },
++            async unarchiveSession(request) {
++                const { sessionId } = request.payload;
++                try {
++                    await ctx.workspaceRegistry.unarchiveSession(sessionId);
++                }
++                catch (error) {
++                    // Only the registry's unknown-session rejection is the business
++                    // code; storage/durability failures propagate as internal errors.
++                    if (!(error instanceof WorkspaceUnknownSessionError))
++                        throw error;
++                    return err(request, {
++                        code: 'session-not-found',
++                        message: error.message,
++                        details: { sessionId },
++                    });
++                }
+                 return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] });
+             },
++            async deleteSession(request) {
++                const { sessionId } = request.payload;
++                try {
++                    await ctx.workspaceRegistry.deleteSession(sessionId);
++                }
++                catch (error) {
++                    // The registry's live-session refusal and unknown-session rejection
++                    // are business codes; storage/durability failures propagate.
++                    if (error instanceof WorkspaceLiveSessionError) {
++                        return err(request, {
++                            code: 'session-live',
++                            message: error.message,
++                            details: { sessionId },
++                        });
++                    }
++                    if (!(error instanceof WorkspaceUnknownSessionError))
++                        throw error;
++                    return err(request, {
++                        code: 'session-not-found',
++                        message: error.message,
++                        details: { sessionId },
++                    });
++                }
++                return ok(request, { deleted: true });
++            },
++            async trashList(request) {
++                return ok(request, { items: await ctx.workspaceRegistry.trashList() });
++            },
++            async trashRestore(request) {
++                const { sessionId } = request.payload;
++                try {
++                    await ctx.workspaceRegistry.trashRestore(sessionId);
++                }
++                catch (error) {
++                    if (!(error instanceof WorkspaceUnknownSessionError))
++                        throw error;
++                    return err(request, {
++                        code: 'session-not-found',
++                        message: error.message,
++                        details: { sessionId },
++                    });
++                }
++                return ok(request, { restored: true });
++            },
++            async trashPurge(request) {
++                const { sessionId } = request.payload;
++                await ctx.workspaceRegistry.trashPurge(sessionId);
++                return ok(request, { purged: true });
++            },
++            async trashEmpty(request) {
++                await ctx.workspaceRegistry.trashEmpty();
++                return ok(request, { purged: true });
++            },
+         },
+         host: {
+@@ -3279,4 +3369,7 @@ export function createApiProxy(ctx, defaults) {
+                         queue.push(frame({ type: 'host/session-removed', sessionId: session.id }));
+                     }),
++                    ctx.on('workspace/session-deleted', (sessionId) => {
++                        queue.push(frame({ type: 'host/session-removed', sessionId }));
++                    }),
+                     ctx.on('agent/status', ({ agent, status }) => {
+                         queue.push(frame({ type: 'host/session-status', sessionId: agent.id, running: status === 'running' }));

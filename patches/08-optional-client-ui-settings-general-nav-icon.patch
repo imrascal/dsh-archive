@@ -1,0 +1,115 @@
+diff --git "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-client-ui-settings-general\\package\\lib\\client.js" "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-client-ui-settings-general\\lib\\client.js"
+index 6d41a58..d630ed6 100644
+--- "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-client-ui-settings-general\\package\\lib\\client.js"
++++ "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-client-ui-settings-general\\lib\\client.js"	
+@@ -26,6 +26,6 @@ window.__ModuleLoader__.load({
+ 		}
+ 		//#endregion
+-		//#region \0dsh-css:/home/runner/work/deepseek-harness/deepseek-harness/packages/client/ui-settings-general/src/client/SettingsRoot.module.css.mjs
+-		const css$3 = ".VOzbGW_trigger{box-sizing:border-box;cursor:pointer;width:calc(100% + 8px);height:34px;color:var(--dsw-alias-label-primary);background:0 0;border:none;border-radius:12px;flex:none;align-items:center;gap:8px;margin:4px -4px;padding:6px 2px 6px 10px;font-family:inherit;font-size:14px;line-height:22px;display:flex;overflow:hidden}.VOzbGW_trigger:hover{background:var(--dsw-alias-interactive-bg-hover)}.VOzbGW_trigger.VOzbGW_rail{border-radius:50%;justify-content:center;gap:0;width:36px;height:36px;margin:8px 0 10px;padding:0}.VOzbGW_triggerLabel{white-space:nowrap;overflow:hidden}.VOzbGW_overlay{z-index:1000;justify-content:center;align-items:center;display:flex;position:fixed;inset:0}.VOzbGW_mask{background:var(--dsw-alias-bg-mask-1);backdrop-filter:var(--dsw-mask-blur);position:absolute;inset:0}.VOzbGW_panel{z-index:1;background:var(--dsw-alias-bg-layer-2);width:800px;max-width:calc(100vw - 48px);height:min(800px,100vh - 48px);box-shadow:var(--dsw-shadow-lv3);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2);--dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2);border-radius:24px;display:flex;position:relative;overflow:hidden}.VOzbGW_nav{box-sizing:border-box;flex-direction:column;flex:none;gap:18px;width:188px;padding:22px 12px 0;display:flex}.VOzbGW_navTitle{color:var(--dsw-alias-label-primary);padding:0 12px;font-size:16px;font-weight:500;line-height:24px}.VOzbGW_navList{flex-direction:column;gap:4px;display:flex}.VOzbGW_navCell{box-sizing:border-box;cursor:pointer;height:40px;color:var(--dsw-alias-label-primary);text-align:left;background:0 0;border:none;border-radius:12px;align-items:center;gap:8px;padding:9px 16px 9px 12px;font-family:inherit;font-size:14px;font-weight:400;line-height:22px;display:flex}.VOzbGW_navCell:hover{background:var(--dsw-specific-sidebar-nav-item-hover)}.VOzbGW_navCell.VOzbGW_active{background:var(--dsw-specific-sidebar-nav-item-active)}.VOzbGW_navIcon{flex:none}.VOzbGW_navLabel{white-space:nowrap;text-overflow:ellipsis;flex:1;min-width:0;overflow:hidden}.VOzbGW_content{flex-direction:column;flex:1;min-width:0;display:flex}.VOzbGW_header{box-sizing:border-box;flex:none;justify-content:space-between;align-items:flex-start;gap:8px;height:54px;padding:20px 14px 8px 10px;display:flex}.VOzbGW_actions{justify-content:flex-end;align-items:center;gap:8px;min-width:0;margin-left:auto;display:flex}.VOzbGW_close{cursor:pointer;width:28px;height:28px;color:var(--dsw-alias-label-primary);background:0 0;border:none;border-radius:28px;justify-content:center;align-items:center;padding:0;display:inline-flex}.VOzbGW_close:hover{background:var(--dsw-alias-interactive-bg-hover)}.VOzbGW_options{flex:1;min-height:0;padding:0 24px 24px;overflow-y:auto}.VOzbGW_hiddenLabel{clip:rect(0 0 0 0);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}";
++		//#region \0dsh-css:C:\Users\t4wefan\code\github\deepseek-harness-desktop\packages\client\ui-settings-general\src\client\SettingsRoot.module.css.mjs
++		const css$3 = ".qB4czW_trigger{box-sizing:border-box;cursor:pointer;width:calc(100% + 8px);height:34px;color:var(--dsw-alias-label-primary);background:0 0;border:none;border-radius:12px;flex:none;align-items:center;gap:8px;margin:4px -4px;padding:6px 2px 6px 10px;font-family:inherit;font-size:14px;line-height:22px;display:flex;overflow:hidden}.qB4czW_trigger:hover{background:var(--dsw-alias-interactive-bg-hover)}.qB4czW_trigger.qB4czW_rail{border-radius:50%;justify-content:center;gap:0;width:36px;height:36px;margin:8px 0 10px;padding:0}.qB4czW_triggerLabel{white-space:nowrap;overflow:hidden}.qB4czW_overlay{z-index:1000;justify-content:center;align-items:center;display:flex;position:fixed;inset:0}.qB4czW_mask{background:var(--dsw-alias-bg-mask-1);backdrop-filter:var(--dsw-mask-blur);position:absolute;inset:0}.qB4czW_panel{z-index:1;background:var(--dsw-alias-bg-layer-2);width:800px;max-width:calc(100vw - 48px);height:min(800px,100vh - 48px);box-shadow:var(--dsw-shadow-lv3);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2);--dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2);border-radius:24px;display:flex;position:relative;overflow:hidden}.qB4czW_nav{box-sizing:border-box;flex-direction:column;flex:none;gap:18px;width:188px;padding:22px 12px 0;display:flex}.qB4czW_navTitle{color:var(--dsw-alias-label-primary);padding:0 12px;font-size:16px;font-weight:500;line-height:24px}.qB4czW_navList{flex-direction:column;gap:4px;display:flex}.qB4czW_navCell{box-sizing:border-box;cursor:pointer;height:40px;color:var(--dsw-alias-label-primary);text-align:left;background:0 0;border:none;border-radius:12px;align-items:center;gap:8px;padding:9px 16px 9px 12px;font-family:inherit;font-size:14px;font-weight:400;line-height:22px;display:flex}.qB4czW_navCell:hover{background:var(--dsw-specific-sidebar-nav-item-hover)}.qB4czW_navCell.qB4czW_active{background:var(--dsw-specific-sidebar-nav-item-active)}.qB4czW_navIcon{flex:none}.qB4czW_navLabel{white-space:nowrap;text-overflow:ellipsis;flex:1;min-width:0;overflow:hidden}.qB4czW_content{flex-direction:column;flex:1;min-width:0;display:flex}.qB4czW_header{box-sizing:border-box;flex:none;justify-content:space-between;align-items:flex-start;gap:8px;height:54px;padding:20px 14px 8px 10px;display:flex}.qB4czW_actions{justify-content:flex-end;align-items:center;gap:8px;min-width:0;margin-left:auto;display:flex}.qB4czW_close{cursor:pointer;width:28px;height:28px;color:var(--dsw-alias-label-primary);background:0 0;border:none;border-radius:28px;justify-content:center;align-items:center;padding:0;display:inline-flex}.qB4czW_close:hover{background:var(--dsw-alias-interactive-bg-hover)}.qB4czW_options{flex:1;min-height:0;padding:0 24px 24px;overflow-y:auto}.qB4czW_hiddenLabel{clip:rect(0 0 0 0);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}";
+ 		const tagId$3 = "@deepseek-ai/dsh-client-ui-settings-general/SettingsRoot.module.css";
+ 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$3) + "]") === null) {
+@@ -37,23 +37,23 @@ window.__ModuleLoader__.load({
+ 		}
+ 		var SettingsRoot_module_css_default = {
+-			"options": "VOzbGW_options",
+-			"navList": "VOzbGW_navList",
+-			"panel": "VOzbGW_panel",
+-			"actions": "VOzbGW_actions",
+-			"navCell": "VOzbGW_navCell",
+-			"triggerLabel": "VOzbGW_triggerLabel",
+-			"active": "VOzbGW_active",
+-			"navLabel": "VOzbGW_navLabel",
+-			"navIcon": "VOzbGW_navIcon",
+-			"trigger": "VOzbGW_trigger",
+-			"content": "VOzbGW_content",
+-			"close": "VOzbGW_close",
+-			"rail": "VOzbGW_rail",
+-			"nav": "VOzbGW_nav",
+-			"overlay": "VOzbGW_overlay",
+-			"navTitle": "VOzbGW_navTitle",
+-			"header": "VOzbGW_header",
+-			"hiddenLabel": "VOzbGW_hiddenLabel",
+-			"mask": "VOzbGW_mask"
++			"nav": "qB4czW_nav",
++			"navList": "qB4czW_navList",
++			"navLabel": "qB4czW_navLabel",
++			"triggerLabel": "qB4czW_triggerLabel",
++			"header": "qB4czW_header",
++			"navIcon": "qB4czW_navIcon",
++			"rail": "qB4czW_rail",
++			"panel": "qB4czW_panel",
++			"content": "qB4czW_content",
++			"navTitle": "qB4czW_navTitle",
++			"close": "qB4czW_close",
++			"options": "qB4czW_options",
++			"actions": "qB4czW_actions",
++			"active": "qB4czW_active",
++			"hiddenLabel": "qB4czW_hiddenLabel",
++			"overlay": "qB4czW_overlay",
++			"trigger": "qB4czW_trigger",
++			"mask": "qB4czW_mask",
++			"navCell": "qB4czW_navCell"
+ 		};
+ 		//#endregion
+@@ -85,4 +85,8 @@ window.__ModuleLoader__.load({
+ 				size: 16
+ 			});
++			if (id === "archived-sessions") return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconArchiveOutline20, {
++				className: SettingsRoot_module_css_default.navIcon,
++				size: 16
++			});
+ 			return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconSettingsOutline16, {
+ 				className: SettingsRoot_module_css_default.navIcon,
+@@ -229,6 +233,6 @@ window.__ModuleLoader__.load({
+ 		}
+ 		//#endregion
+-		//#region \0dsh-css:/home/runner/work/deepseek-harness/deepseek-harness/packages/client/ui-settings-general/src/client/chrome.module.css.mjs
+-		const css$2 = ".UQsH_q_triggerLabel{white-space:nowrap;overflow:hidden}";
++		//#region \0dsh-css:C:\Users\t4wefan\code\github\deepseek-harness-desktop\packages\client\ui-settings-general\src\client\chrome.module.css.mjs
++		const css$2 = ".m1hHIa_triggerLabel{white-space:nowrap;overflow:hidden}";
+ 		const tagId$2 = "@deepseek-ai/dsh-client-ui-settings-general/chrome.module.css";
+ 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$2) + "]") === null) {
+@@ -239,5 +243,5 @@ window.__ModuleLoader__.load({
+ 			document.head.appendChild(tag);
+ 		}
+-		var chrome_module_css_default = { "triggerLabel": "UQsH_q_triggerLabel" };
++		var chrome_module_css_default = { "triggerLabel": "m1hHIa_triggerLabel" };
+ 		//#endregion
+ 		//#region lib/types/client/chrome.js
+@@ -276,6 +280,6 @@ window.__ModuleLoader__.load({
+ 		}
+ 		//#endregion
+-		//#region \0dsh-css:/home/runner/work/deepseek-harness/deepseek-harness/packages/client/ui-settings-general/src/client/GeneralSection.module.css.mjs
+-		const css$1 = "._WvWnq_section{flex-direction:column;width:100%;display:flex}._WvWnq_section>[data-slot=\"settings.general.item\"]>:last-child{border-bottom:none}";
++		//#region \0dsh-css:C:\Users\t4wefan\code\github\deepseek-harness-desktop\packages\client\ui-settings-general\src\client\GeneralSection.module.css.mjs
++		const css$1 = ".a4F-Fq_section{flex-direction:column;width:100%;display:flex}.a4F-Fq_section>[data-slot=\"settings.general.item\"]>:last-child{border-bottom:none}";
+ 		const tagId$1 = "@deepseek-ai/dsh-client-ui-settings-general/GeneralSection.module.css";
+ 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$1) + "]") === null) {
+@@ -286,5 +290,5 @@ window.__ModuleLoader__.load({
+ 			document.head.appendChild(tag);
+ 		}
+-		var GeneralSection_module_css_default = { "section": "_WvWnq_section" };
++		var GeneralSection_module_css_default = { "section": "a4F-Fq_section" };
+ 		//#endregion
+ 		//#region lib/types/client/GeneralSection.js
+@@ -301,6 +305,6 @@ window.__ModuleLoader__.load({
+ 		}
+ 		//#endregion
+-		//#region \0dsh-css:/home/runner/work/deepseek-harness/deepseek-harness/packages/client/ui-settings-general/src/client/SettingsDocumentAction.module.css.mjs
+-		const css = ".me01iq_action{align-items:center;gap:8px;min-width:0;display:flex}.me01iq_error{max-width:180px;color:var(--dsw-alias-state-error-primary);text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:18px;overflow:hidden}";
++		//#region \0dsh-css:C:\Users\t4wefan\code\github\deepseek-harness-desktop\packages\client\ui-settings-general\src\client\SettingsDocumentAction.module.css.mjs
++		const css = ".pqzihW_action{align-items:center;gap:8px;min-width:0;display:flex}.pqzihW_error{max-width:180px;color:var(--dsw-alias-state-error-primary);text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:18px;overflow:hidden}";
+ 		const tagId = "@deepseek-ai/dsh-client-ui-settings-general/SettingsDocumentAction.module.css";
+ 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
+@@ -312,6 +316,6 @@ window.__ModuleLoader__.load({
+ 		}
+ 		var SettingsDocumentAction_module_css_default = {
+-			"error": "me01iq_error",
+-			"action": "me01iq_action"
++			"error": "pqzihW_error",
++			"action": "pqzihW_action"
+ 		};
+ 		//#endregion

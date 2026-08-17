@@ -1,0 +1,136 @@
+diff --git "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-workspace\\package\\lib\\index.js" "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-workspace\\lib\\index.js"
+index b9d5a8e..0049df9 100644
+--- "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-workspace\\package\\lib\\index.js"
++++ "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-workspace\\lib\\index.js"	
+@@ -266,4 +266,16 @@ var WorkspaceUnknownSessionError = class extends Error {
+ 	}
+ };
++/** A deleteSession request named a session that is currently live/attached — deletion of running sessions is refused. */
++var WorkspaceLiveSessionError = class extends Error {
++	sessionId;
++	/**
++	* @param sessionId - The live session id.
++	*/
++	constructor(sessionId) {
++		super(`cannot delete session '${sessionId}': the session is live; stop or detach it before deleting`);
++		this.sessionId = sessionId;
++		this.name = "WorkspaceLiveSessionError";
++	}
++};
+ /** A workspace reorder named a source or anchor absent from the durable registry order. */
+ var WorkspaceOrderInvalidError = class extends Error {
+@@ -432,4 +444,109 @@ var WorkspaceRegistry = class extends Service {
+ 	}
+ 	/**
++	* Unarchive (restore) one session: remove it from the registry-global
++	* archive set. The session keeps its workspace accounting slot, so it
++	* reappears at its original position in every grouping surface. A session
++	* that is not archived resolves without writing; an unknown session is
++	* rejected like archiving does.
++	* @param sessionId - The session to unarchive.
++	* @returns resolution after durability.
++	*/
++	unarchiveSession(sessionId) {
++		return this.enqueueOperation(async () => {
++			const state = this.requireState();
++			if (!state.archivedSessionIds.includes(sessionId)) return;
++			if (!await this.sessionKnown(sessionId)) throw new WorkspaceUnknownSessionError(sessionId);
++			await this.setState({
++				...state,
++				archivedSessionIds: state.archivedSessionIds.filter((id) => id !== sessionId)
++			});
++		});
++	}
++	/**
++	* Delete one cold session: move its persisted artifact into the trash
++	* through the session-persistence service, detach it from every workspace's
++	* accounting, and clear it from the registry-global archive set. Live
++	* sessions are refused; a session that does not exist anywhere is rejected
++	* like archiving does. Emits `workspace/session-deleted` so the host stream
++	* can push a session-removed frame to clients. Attachments are
++	* content-addressed and shared, so they are intentionally not removed. The
++	* trashed artifact remains recoverable via {@link trashRestore} until the
++	* trash is purged or emptied.
++	* @param sessionId - The session to delete.
++	* @returns resolution after durability.
++	*/
++	deleteSession(sessionId) {
++		return this.enqueueOperation(async () => {
++			if (this.ctx.get("sessions")?.get(sessionId) !== void 0) throw new WorkspaceLiveSessionError(sessionId);
++			if (!await this.sessionKnown(sessionId)) throw new WorkspaceUnknownSessionError(sessionId);
++			await this.ctx.sessionPersistence.remove(sessionId);
++			for (const entity of this.entities.values()) if (entity.record.sessionIds.includes(sessionId)) await entity.detachSession(sessionId);
++			const state = this.requireState();
++			if (state.archivedSessionIds.includes(sessionId)) {
++				await this.setState({
++					...state,
++					archivedSessionIds: state.archivedSessionIds.filter((id) => id !== sessionId)
++				});
++			}
++			this.headers.delete(sessionId);
++			this.sessionPaths.delete(sessionId);
++			this.invalidSessionPaths.delete(sessionId);
++			this.ctx.emit("workspace/session-deleted", sessionId);
++		});
++	}
++	/**
++	* List sessions currently in the trash (moved out of the live store by
++	* {@link deleteSession}).
++	* @returns trash rows `{ sessionId, cwd, createdAt, movedAt }`.
++	*/
++	async trashList() {
++		return this.ctx.sessionPersistence.trashList();
++	}
++	/**
++	* Restore one trashed session into the live store and re-attach its
++	* workspace accounting when a matching workspace exists.
++	* @param sessionId - the trashed session to restore.
++	* @returns the stored header meta, or throws when not trashed.
++	*/
++	async trashRestore(sessionId) {
++		const header = await this.ctx.sessionPersistence.trashRestore(sessionId);
++		if (header === void 0) throw new WorkspaceUnknownSessionError(sessionId);
++		this.headers.set(sessionId, header);
++		this.sessionPaths.set(sessionId, header.cwd);
++		this.invalidSessionPaths.delete(sessionId);
++		let canonical;
++		try {
++			canonical = await realpathNormalize(header.cwd);
++		} catch {
++			canonical = void 0;
++		}
++		if (canonical !== void 0) for (const entity of this.entities.values()) {
++			if (entity.record.path !== canonical || entity.record.sessionIds.includes(sessionId)) continue;
++			try {
++				await entity.attachSession(sessionId);
++			} catch {
++				/* attachment is best-effort; an ungrouped restore is still a valid restore */
++			}
++			break;
++		}
++		this.ctx.emit("workspace/session-restored", sessionId);
++		return header;
++	}
++	/**
++	* Permanently delete one trashed session.
++	* @param sessionId - the trashed session to purge.
++	* @returns resolution after removal.
++	*/
++	async trashPurge(sessionId) {
++		return this.ctx.sessionPersistence.trashPurge(sessionId);
++	}
++	/**
++	* Permanently delete every trashed session.
++	* @returns resolution after removal.
++	*/
++	async trashEmpty() {
++		return this.ctx.sessionPersistence.trashEmpty();
++	}
++	/**
+ 	* Whether a session is live, header-indexed, or present in a fresh
+ 	* persistence listing. Only a definite miss returns false — a failing
+@@ -755,3 +872,3 @@ var WorkspaceRegistry = class extends Service {
+ const sameSessionIds = (left, right) => left.length === right.length && left.every((id, index) => id === right[index]);
+ //#endregion
+-export { WorkspaceId, WorkspaceMoveInvalidError, WorkspaceOrderInvalidError, WorkspaceRegistry, WorkspaceRegistry as default, WorkspaceUnknownSessionError, realpathNormalize, workspaceDomainSpec, workspaceDomainState, workspaceRecord };
++export { WorkspaceId, WorkspaceLiveSessionError, WorkspaceMoveInvalidError, WorkspaceOrderInvalidError, WorkspaceRegistry, WorkspaceRegistry as default, WorkspaceUnknownSessionError, realpathNormalize, workspaceDomainSpec, workspaceDomainState, workspaceRecord };

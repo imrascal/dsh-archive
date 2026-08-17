@@ -1,0 +1,54 @@
+{
+  "name": "@imrascal/dsh-archive",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness archive session manager: restore/delete archived sessions and manage the trash, from the settings panel. 存档会话管理插件：设置面板管理归档会话（恢复/删除）与回收站。",
+  "type": "module",
+  "license": "MIT",
+  "author": "imrascal",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imrascal/dsh-archive.git"
+  },
+  "bugs": {
+    "url": "https://github.com/imrascal/dsh-archive/issues"
+  },
+  "homepage": "https://github.com/imrascal/dsh-archive#readme",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "archive",
+    "trash",
+    "session"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "files": [
+    "dsh",
+    "cordis.patch.yml",
+    "patches",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./dsh/index.js",
+    "./client": "./dsh/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "slots",
+        "sessions",
+        "workspaces",
+        "locale"
+      ],
+      "platform": "web"
+    }
+  }
+}

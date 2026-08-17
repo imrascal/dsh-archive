@@ -1,0 +1,33 @@
+diff --git "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-host-apiproxy\\package\\lib\\types\\fetch\\client.js" "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-host-apiproxy\\lib\\types\\fetch\\client.js"
+index 1b4e874..63f8a75 100644
+--- "a/C:\\Data\\Coding\\DSH\345\212\237\350\203\275\344\274\230\345\214\226\\plugin-work\\pristine\\pkg-dsh-host-apiproxy\\package\\lib\\types\\fetch\\client.js"
++++ "b/C:\\Applications\\DeepSeek Harness\\resources\\host\\node_modules\\@deepseek-ai\\dsh-host-apiproxy\\lib\\types\\fetch\\client.js"	
+@@ -10,5 +10,5 @@ import { hostFrameSchema, muxFrameSchema } from "../api/events.schema.js";
+ import { hostCreateDirectoryValueSchema, hostDescribeValueSchema, hostListDirectoryValueSchema, hostOpenPathValueSchema, hostPickDirectoryValueSchema, } from "../api/host.schema.js";
+ import { sessionCancelValueSchema, sessionAttachmentValueSchema, sessionCreateValueSchema, sessionForkValueSchema, sessionHistoryValueSchema, sessionListValueSchema, sessionModelsValueSchema, sessionPromptValueSchema, sessionRenameValueSchema, sessionSearchValueSchema, sessionSelectModelValueSchema, sessionUpdateQueueValueSchema, } from "../api/sessions.schema.js";
+-import { workspaceArchiveSessionValueSchema, workspaceCreateValueSchema, workspaceDeleteValueSchema, workspaceInsertBeforeValueSchema, workspaceInsertSessionBeforeValueSchema, workspaceListValueSchema, workspaceRenameValueSchema, } from "../api/workspace.schema.js";
++import { workspaceArchiveSessionValueSchema, workspaceCreateValueSchema, workspaceDeleteSessionValueSchema, workspaceDeleteValueSchema, workspaceInsertBeforeValueSchema, workspaceInsertSessionBeforeValueSchema, workspaceListValueSchema, workspaceRenameValueSchema, workspaceTrashEmptyValueSchema, workspaceTrashListValueSchema, workspaceTrashPurgeValueSchema, workspaceTrashRestoreValueSchema, workspaceUnarchiveSessionValueSchema, } from "../api/workspace.schema.js";
+ import { skillListValueSchema } from "../api/skills.schema.js";
+ import { agentPresetCopyValueSchema, agentPresetListValueSchema, agentPresetOpenDocumentValueSchema, agentPresetReadValueSchema, agentPresetRemoveValueSchema, agentPresetSelectValueSchema, } from "../api/agent-presets.schema.js";
+@@ -51,4 +51,10 @@ const UNARY_VALUE_SCHEMAS = {
+     'workspace.insertSessionBefore': workspaceInsertSessionBeforeValueSchema,
+     'workspace.archiveSession': workspaceArchiveSessionValueSchema,
++    'workspace.unarchiveSession': workspaceUnarchiveSessionValueSchema,
++    'workspace.deleteSession': workspaceDeleteSessionValueSchema,
++    'workspace.trashList': workspaceTrashListValueSchema,
++    'workspace.trashRestore': workspaceTrashRestoreValueSchema,
++    'workspace.trashPurge': workspaceTrashPurgeValueSchema,
++    'workspace.trashEmpty': workspaceTrashEmptyValueSchema,
+     'skill.list': skillListValueSchema,
+     'agentPreset.list': agentPresetListValueSchema,
+@@ -277,4 +283,10 @@ export class AbstractApiClient {
+         insertSessionBefore: (payload, signal) => this.callUnary('workspace.insertSessionBefore', payload, signal),
+         archiveSession: (payload, signal) => this.callUnary('workspace.archiveSession', payload, signal),
++        unarchiveSession: (payload, signal) => this.callUnary('workspace.unarchiveSession', payload, signal),
++        deleteSession: (payload, signal) => this.callUnary('workspace.deleteSession', payload, signal),
++        trashList: (payload, signal) => this.callUnary('workspace.trashList', payload, signal),
++        trashRestore: (payload, signal) => this.callUnary('workspace.trashRestore', payload, signal),
++        trashPurge: (payload, signal) => this.callUnary('workspace.trashPurge', payload, signal),
++        trashEmpty: (payload, signal) => this.callUnary('workspace.trashEmpty', payload, signal),
+     };
+     skills = {

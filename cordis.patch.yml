@@ -1,0 +1,8 @@
+# dsh bundle layer: mount the archive-session manager plugin.
+# dsh/index.js (host half, via the package root export) ensures the trash /
+# unarchive backend on stock hosts and serves a fallback HTTP API;
+# dsh/client.js (browser half, via the "./client" export) registers the
+# "存档会话 / Archived Sessions" settings section.
+- insert:
+    - id: dsh-archive
+      name: '@imrascal/dsh-archive'
