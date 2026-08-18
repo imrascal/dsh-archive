@@ -82,13 +82,21 @@ scripts/        eval-check.mjs（客户端 factory 求值校验）与 host-logic
 - `deleteSession` 采用 **fail-closed**：persistence 不具备回收站能力时拒绝删除（不删任何东西），
   插件永远不会驱动官方硬删除后端。
 - 宿主半对每个补丁都有形状守卫，遇到不认识的形态安全跳过并打日志，不会拖垮应用。
+- **Cordis 4 严格注入（0.2.1 修复）**：DSH Desktop 新版携带 `@deepseek-ai/cordis` 4.x，从 ctx
+  直接读服务属性（`ctx.sessionPersistence`）仅在当前 fiber 的 `inject` 声明了该服务时才允许，
+  否则抛 `cannot get property "X" without inject`。宿主半改用 `ctx.get(...)` 与补丁方法的接收者
+  `this.ctx`（Cordis 会 shadow 回注册表自身 fiber）解析服务——绝不通过 `registry.ctx` 读追踪
+  包装器（其 `ctx` 属性解析为**调用方**的 ctx）。旧版 Cordis 3.x 宿主两种写法都行；0.2.1 的写法
+  在 Cordis 4 上是必须的。
 - 平台：Windows / macOS / Linux（回收站为纯 Node `fs` 实现，无平台假设）。
 
 ## 开发
 
 ```bash
+npm install                                # 拉取 @deepseek-ai/cordis devDependency
 node scripts/host-logic-test.mjs        # 宿主半全链路：删除→回收站→恢复→purge→清空→live 拒绝
 node scripts/host-robustness-test.mjs   # 晚到服务注入 + fail-closed 删除 + 路由按需补丁
+node scripts/cordis4-strict-test.mjs    # 真实 Cordis 4 严格注入回归测试（0.2.1 "without inject" 修复）
 node scripts/eval-check.mjs             # 客户端 bundle 求值 + apply + 插槽注册 + 晚到服务实时判定
 ```
 

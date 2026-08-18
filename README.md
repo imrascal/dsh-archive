@@ -90,13 +90,22 @@ To migrate:
 - `deleteSession` is **fail-closed**: it refuses to run unless the persistence layer is trash-aware,
   so the plugin can never drive a stock hard-delete backend (nothing is removed on refusal).
 - Host half shape-guards every patch; unrecognized services are skipped with a log line, never fatal.
+- **Cordis 4 strict inject (0.2.1)**: DSH Desktop ships `@deepseek-ai/cordis` 4.x, where reading a
+  service property off a context (`ctx.sessionPersistence`) is only allowed when the current fiber
+  declares it in `inject`; undeclared reads throw `cannot get property "X" without inject`. The host
+  half resolves services through `ctx.get(...)` and through the patched methods' receiver
+  (`this.ctx`, which Cordis shadows to the registry's own fiber) — never through
+  `registry.ctx` on a traceable service wrapper, whose `ctx` property resolves to the *caller's*
+  context. On older Cordis 3.x hosts both spellings work; the 0.2.1 path is required on Cordis 4.
 - Platform: Windows / macOS / Linux (trash is plain Node `fs`; no platform assumptions).
 
 ## Development
 
 ```bash
+npm install                                # fetches the @deepseek-ai/cordis devDependency
 node scripts/host-logic-test.mjs        # host lifecycle: delete → trash → restore → purge → empty → live refusal
 node scripts/host-robustness-test.mjs   # late service provision + fail-closed delete + route on-demand ensure
+node scripts/cordis4-strict-test.mjs    # REAL Cordis 4 strict-inject regression (0.2.1: "without inject" fix)
 node scripts/eval-check.mjs             # client bundle factory eval + apply + slot registration + late-service detection
 ```
 

@@ -298,14 +298,23 @@ function ensureRegistryApi(registry, log, hooks = {}) {
     log(`[dsh-archive] workspaceRegistry shape unrecognized (enqueueOperation=${typeof registry.enqueueOperation}, sessionKnown=${typeof registry.sessionKnown}) — skipping API patch`)
     return false
   }
-  const ensureTrash = () => {
+  const ensureTrash = (self) => {
     if (typeof hooks.ensureTrash !== 'function') return false
     try {
       hooks.ensureTrash()
     } catch (error) {
       /* logged by the caller of the hook */
     }
-    const persistence = registry.ctx?.sessionPersistence
+    // NOTE: resolve through the method receiver (`self.ctx`), never through
+    // the registry variable (`registry.ctx`). Cordis wraps every service
+    // value retrieved from a context in a "traceable" proxy whose `ctx`
+    // property returns the CALLER's context — on the plugin's own ctx that
+    // would be a fiber whose inject list does not cover `sessionPersistence`,
+    // and Cordis 4's strict proxy throws `cannot get property
+    // "sessionPersistence" without inject`. The method receiver carries the
+    // shadowed ctx (via `ctx[symbols.shadow]`), which resolves to the
+    // registry's own fiber and its inject-listed `sessionPersistence`.
+    const persistence = self.ctx?.sessionPersistence
     return persistence !== undefined && typeof persistence.trashList === 'function'
   }
 
@@ -326,8 +335,10 @@ function ensureRegistryApi(registry, log, hooks = {}) {
   registry.deleteSession = function deleteSession(sessionId) {
     return this.enqueueOperation(async () => {
       // Fail-closed: never drive a hard-delete backend. Ensure the trash
-      // layer first; refuse when it cannot be established.
-      if (!ensureTrash()) {
+      // layer first; refuse when it cannot be established. Pass `this` so
+      // `ensureTrash` resolves services through the method receiver's ctx
+      // (see the note in ensureTrash).
+      if (!ensureTrash(this)) {
         throw businessError(
           'unavailable',
           'trash backend unavailable — refusing to delete session (nothing was removed); the session-persistence service lacks trash support',
@@ -429,7 +440,12 @@ function registerHttpApi(scope, rootCtx, ensureBackend, log) {
       // the registry behind an inject), so re-run the idempotent patch pass
       // before every request — it is a cheap no-op once applied.
       ensureBackend()
-      const registry = rootCtx.get?.('workspaceRegistry') ?? rootCtx.workspaceRegistry
+      // Resolve through `.get` only: a bare `ctx.workspaceRegistry` property
+      // read on the plugin's own ctx is rejected by Cordis 4's strict inject
+      // check (`cannot get property "workspaceRegistry" without inject`),
+      // because the registry lives in its own service fiber. `.get` walks the
+      // shared service store and works from any context.
+      const registry = rootCtx.get?.('workspaceRegistry') ?? null
       if (!registry || typeof registry.trashList !== 'function') {
         writeJson(res, 503, { ok: false, code: 'unavailable', message: 'workspace registry backend is not available yet' })
         return
@@ -510,7 +526,10 @@ export function apply(ctx, config = {}) {
       warn(`[dsh-archive] session-persistence trash patch failed: ${String(error)}`)
     }
     try {
-      const registry = ctx.get?.('workspaceRegistry') ?? ctx.workspaceRegistry
+      // `.get` only — see the note in the HTTP route; a direct
+      // `ctx.workspaceRegistry` read here would trip Cordis 4's strict
+      // inject check and be swallowed by the catch below.
+      const registry = ctx.get?.('workspaceRegistry') ?? null
       if (registry) {
         ensureRegistryApi(registry, log, { ensureTrash: ensureBackend })
       }
