@@ -97,6 +97,10 @@ To migrate:
   (`this.ctx`, which Cordis shadows to the registry's own fiber) — never through
   `registry.ctx` on a traceable service wrapper, whose `ctx` property resolves to the *caller's*
   context. On older Cordis 3.x hosts both spellings work; the 0.2.1 path is required on Cordis 4.
+- **Dual-store client resync (0.2.2)**: after a fallback-path delete, the client refreshes BOTH the
+  workspaces and the sessions stores. 0.2.0/0.2.1 only refreshed the workspaces view, so the deleted
+  session stayed in the stale sessions list while dropping out of every workspace — the sidebar then
+  rendered it in the **Ungrouped** bucket (visible until the next full reload).
 - Platform: Windows / macOS / Linux (trash is plain Node `fs`; no platform assumptions).
 
 ## Development
@@ -106,7 +110,7 @@ npm install                                # fetches the @deepseek-ai/cordis dev
 node scripts/host-logic-test.mjs        # host lifecycle: delete → trash → restore → purge → empty → live refusal
 node scripts/host-robustness-test.mjs   # late service provision + fail-closed delete + route on-demand ensure
 node scripts/cordis4-strict-test.mjs    # REAL Cordis 4 strict-inject regression (0.2.1: "without inject" fix)
-node scripts/eval-check.mjs             # client bundle factory eval + apply + slot registration + late-service detection
+node scripts/eval-check.mjs             # client bundle factory eval + apply + slot registration + late-service detection + dual-store resync (0.2.2)
 ```
 
 ## License

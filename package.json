@@ -1,6 +1,6 @@
 {
   "name": "@imrascal/dsh-archive",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "DeepSeek Harness archive session manager: restore/delete archived sessions and manage the trash, from the settings panel. 存档会话管理插件：设置面板管理归档会话（恢复/删除）与回收站。",
   "type": "module",
   "license": "MIT",

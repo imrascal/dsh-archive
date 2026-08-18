@@ -8,8 +8,16 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 
 // Resolve react / react/jsx-runtime from the installed DSH host so the
-// factory sees the exact runtime the browser uses.
-const hostRequire = createRequire('C:/Applications/DeepSeek Harness/resources/host/node_modules/package.json')
+// factory sees the exact runtime the browser uses. The host location differs
+// across installs (desktop app unpacked resources vs `dsh web` host tree).
+import { existsSync } from 'node:fs'
+const hostCandidates = [
+  'C:/Applications/DSH Desktop/resources/app.asar.unpacked/node_modules/react/package.json',
+  'C:/Applications/DeepSeek Harness/resources/host/node_modules/react/package.json',
+]
+const hostAnchor = hostCandidates.find((candidate) => existsSync(candidate))
+if (!hostAnchor) throw new Error('no DSH host node_modules found to resolve react from')
+const hostRequire = createRequire(hostAnchor)
 const code = readFileSync(new URL('../dsh/client.js', import.meta.url), 'utf8')
 
 let captured = null
@@ -181,6 +189,36 @@ console.log('[slot] trashEmpty() resolved (native path)')
     throw new Error('expected the native path after the workspaces API appeared')
   }
   console.log('[late] loadTrash() after native API appeared -> used native path (rows:', rows2.length + ')')
+}
+
+// --- resync must refresh BOTH stores (0.2.2 regression) ---------------------
+// Extracting the real `resync` body from the bundle and driving it with stub
+// stores proves the fix: after a fallback delete the workspaces view drops
+// the session while the sessions list stays stale, so the deleted row would
+// land in the sidebar's ungrouped bucket unless both stores are refreshed.
+{
+  const match = code.match(/function resync\(ctx\) \{[\s\S]*?\n    \}/)
+  if (!match) throw new Error('could not extract resync from the bundle')
+  const resync = new Function(`return (${match[0]})`)()
+  const calls = []
+  const stub = (name) => () => { calls.push(name); return Promise.resolve() }
+  const workspacesOnly = { workspaces: { manager: { refresh: stub('workspaces') } } }
+  await resync(workspacesOnly)
+  if (calls.join(',') !== 'workspaces') throw new Error('expected workspaces refresh only when sessions is absent')
+  calls.length = 0
+  const both = {
+    workspaces: { manager: { refresh: stub('workspaces') } },
+    sessions: { refresh: stub('sessions') },
+  }
+  await resync(both)
+  if (calls.join(',') !== 'workspaces,sessions') {
+    throw new Error(`resync must refresh BOTH stores (got: ${calls.join(',')}) — stale sessions rows would render in the ungrouped bucket`)
+  }
+  console.log('[resync] workspaces + sessions both refreshed (order:', calls.join(', ') + ')')
+  calls.length = 0
+  await resync({ sessions: { refresh: stub('sessions') } })
+  if (calls.join(',') !== 'sessions') throw new Error('expected sessions refresh when workspaces is absent')
+  console.log('[resync] sessions-only ctx handled')
 }
 
 console.log('\nALL CLIENT EVAL CHECKS PASSED')

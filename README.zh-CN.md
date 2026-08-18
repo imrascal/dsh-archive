@@ -88,6 +88,9 @@ scripts/        eval-check.mjs（客户端 factory 求值校验）与 host-logic
   `this.ctx`（Cordis 会 shadow 回注册表自身 fiber）解析服务——绝不通过 `registry.ctx` 读追踪
   包装器（其 `ctx` 属性解析为**调用方**的 ctx）。旧版 Cordis 3.x 宿主两种写法都行；0.2.1 的写法
   在 Cordis 4 上是必须的。
+- **客户端双 store 重同步（0.2.2 修复）**：降级路径删除后，客户端现在**同时刷新 workspaces 与
+  sessions 两个 store**。0.2.0/0.2.1 只刷新了工作区视图——已删会话残留在旧 sessions 列表、又
+  不在任何工作区的 sessionIds 里 → 侧边栏把它渲染进**未分组**桶（直到下次整体刷新才消失）。
 - 平台：Windows / macOS / Linux（回收站为纯 Node `fs` 实现，无平台假设）。
 
 ## 开发
@@ -97,7 +100,7 @@ npm install                                # 拉取 @deepseek-ai/cordis devDepen
 node scripts/host-logic-test.mjs        # 宿主半全链路：删除→回收站→恢复→purge→清空→live 拒绝
 node scripts/host-robustness-test.mjs   # 晚到服务注入 + fail-closed 删除 + 路由按需补丁
 node scripts/cordis4-strict-test.mjs    # 真实 Cordis 4 严格注入回归测试（0.2.1 "without inject" 修复）
-node scripts/eval-check.mjs             # 客户端 bundle 求值 + apply + 插槽注册 + 晚到服务实时判定
+node scripts/eval-check.mjs             # 客户端 bundle 求值 + apply + 插槽注册 + 晚到服务实时判定 + 双 store 重同步（0.2.2）
 ```
 
 ## License

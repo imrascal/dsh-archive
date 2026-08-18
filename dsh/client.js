@@ -230,23 +230,32 @@ window.__ModuleLoader__.load({
       return typeof ctx.workspaces === 'object' && ctx.workspaces !== null && typeof ctx.workspaces.trashList === 'function'
     }
 
-    /** Best-effort resync of the session/workspace stores after a fallback op. */
+    /**
+     * Best-effort resync of the session/workspace stores after a fallback op.
+     * BOTH stores must be refreshed, never just the first one that exists: the
+     * workspaces view drops the deleted session (the host detaches it from its
+     * entity and clears its sessionPaths entry), but if the sessions list is
+     * not refreshed too, the stale row survives and the sidebar renders it in
+     * the ungrouped bucket — it is no longer accounted by any workspace yet
+     * still present in the list (regression observed on the trash path).
+     */
     function resync(ctx) {
+      var jobs = []
       try {
         if (ctx.workspaces && ctx.workspaces.manager && typeof ctx.workspaces.manager.refresh === 'function') {
-          return Promise.resolve(ctx.workspaces.manager.refresh()).catch(function () {})
+          jobs.push(Promise.resolve(ctx.workspaces.manager.refresh()).catch(function () {}))
         }
       } catch (error) {
         /* fall through */
       }
       try {
         if (ctx.sessions && typeof ctx.sessions.refresh === 'function') {
-          return Promise.resolve(ctx.sessions.refresh()).catch(function () {})
+          jobs.push(Promise.resolve(ctx.sessions.refresh()).catch(function () {}))
         }
       } catch (error) {
         /* ignore */
       }
-      return Promise.resolve()
+      return Promise.all(jobs).then(function () {})
     }
 
     // ---------------------------------------------------------------------
