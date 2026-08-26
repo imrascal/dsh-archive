@@ -1,3 +1,12 @@
+'use strict';
+
+/**
+ * @module dsh-archive/client
+ * @description Client-side half of the dsh-archive plugin.
+ * Registers the "Archived Sessions" section in the DSH settings panel
+ * and provides restore/delete/trash management UI.
+ */
+
 // DeepSeek Harness (dsh) plugin — browser half of the archive-session manager.
 //
 // Registers the "存档会话 / Archived Sessions" settings section (the

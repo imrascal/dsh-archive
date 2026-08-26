@@ -1,3 +1,13 @@
+'use strict';
+
+/**
+ * @module dsh-archive
+ * @description Host-side half of the dsh-archive plugin.
+ * Manages archived sessions and trash through runtime patching when the
+ * host does not yet carry the native archive API, and adds a fallback
+ * HTTP route at /dsh-archive/session.
+ */
+
 // DeepSeek Harness (dsh) plugin — host half of the archive-session manager.
 //
 // The feature ("存档会话管理") exists in two forms in the wild:
