@@ -1,5 +1,9 @@
 # @imrascal/dsh-archive
 
+[![CI](https://github.com/imrascal/dsh-archive/actions/workflows/ci.yml/badge.svg)](https://github.com/imrascal/dsh-archive/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![npm version](https://img.shields.io/npm/v/@imrascal/dsh-archive.svg)](https://www.npmjs.com/package/@imrascal/dsh-archive)
+
 A DeepSeek Harness (DSH) plugin that manages **archived sessions and the trash** from the settings panel.
 
 - **Archived Sessions**: review sessions that are hidden from the sidebar but keep their records;
