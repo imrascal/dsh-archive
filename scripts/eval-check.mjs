@@ -3,21 +3,23 @@
 // apply(ctx) against a minimal mocked ctx (slots/locale/workspaces/sessions).
 // Catches module-level evaluation errors and apply-level wiring errors
 // without needing a browser.
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 // Resolve react / react/jsx-runtime from the installed DSH host so the
 // factory sees the exact runtime the browser uses. The host location differs
-// across installs (desktop app unpacked resources vs `dsh web` host tree).
-import { existsSync } from 'node:fs'
+// across installs (desktop app unpacked resources vs `dsh web` host tree), and
+// CI has no host at all — there the repo's own react devDependency is used.
 const hostCandidates = [
   'C:/Applications/DSH Desktop/resources/app.asar.unpacked/node_modules/react/package.json',
   'C:/Applications/DeepSeek Harness/resources/host/node_modules/react/package.json',
+  join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'profiles/web/node_modules/react/package.json'),
 ]
 const hostAnchor = hostCandidates.find((candidate) => existsSync(candidate))
-if (!hostAnchor) throw new Error('no DSH host node_modules found to resolve react from')
-const hostRequire = createRequire(hostAnchor)
+const hostRequire = createRequire(hostAnchor ?? import.meta.url)
+console.log('[eval] react from', hostAnchor ?? 'the repo devDependency')
 const code = readFileSync(new URL('../dsh/client.js', import.meta.url), 'utf8')
 
 let captured = null
