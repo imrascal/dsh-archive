@@ -27,14 +27,15 @@ function makePersistence(root, { withTrash = false } = {}) {
   const service = {
     root,
     compression: 'none',
+    // current hosts answer with a generation record, not a bare path
     findLog: async (id) => {
-      const p = join(root, '--C-work--demo--', id, 'session.jsonl')
+      const p = join(root, '--C-work--demo--', id, 'session.v3.jsonl')
       try {
         await readFile(p)
-        return p
       } catch {
         return undefined
       }
+      return { sourcePath: p, sourceVersion: 3, currentPath: p }
     },
     readFirstLine: async (p) => (await readFile(p, 'utf8')).split('\n')[0],
     remove: async (id) => {
@@ -50,8 +51,8 @@ function makePersistence(root, { withTrash = false } = {}) {
       await rename(dir, join(service.trashRoot(), `${basename(dir)}-${Date.now()}`))
     }
     service.remove = async (id) => {
-      const p = await service.findLog(id)
-      if (p !== undefined) await service.moveToTrash(dirname(p))
+      const selected = await service.findLog(id)
+      if (selected !== undefined) await service.moveToTrash(dirname(selected.sourcePath))
     }
     service.trashList = async () => {
       try {
@@ -143,7 +144,7 @@ console.log('--- fail-closed delete ---')
   const registry = makeRegistry(persistence)
   const sid = 'sid-fc-1'
   await mkdir(join(root, '--C-work--demo--', sid), { recursive: true })
-  await writeFile(join(root, '--C-work--demo--', sid, 'session.jsonl'), `{"type":"session","version":1,"id":"${sid}","createdAt":1750000000000,"cwd":"C:\\\\work\\\\demo","delegationDepth":0}\n`)
+  await writeFile(join(root, '--C-work--demo--', sid, 'session.v3.jsonl'), `{"type":"session","version":3,"id":"${sid}","createdAt":1750000000000,"cwd":"C:\\\\work\\\\demo","delegationDepth":0,"isSeeded":false}\n`)
   await registry.archiveSession(sid)
   // persistence that can never be trash-aware: remove its findLog (shape guard fails)
   persistence.findLog = undefined
@@ -158,7 +159,7 @@ console.log('--- fail-closed delete ---')
     error = e
   }
   check('deleteSession refused with unavailable', error !== null && error.code === 'unavailable')
-  const stillThere = await readFile(join(root, '--C-work--demo--', sid, 'session.jsonl')).then(() => true).catch(() => false)
+  const stillThere = await readFile(join(root, '--C-work--demo--', sid, 'session.v3.jsonl')).then(() => true).catch(() => false)
   check('session artifact untouched (no hard delete)', stillThere)
   await rm(dirname(root), { recursive: true, force: true })
 }

@@ -44,13 +44,14 @@ class FakePersistence extends Service {
     this.compression = 'none'
   }
   async findLog(id) {
-    const path = join(this.root, '--C-work-demo--', id, 'session.jsonl')
+    // current hosts answer with a generation record, not a bare path
+    const path = join(this.root, '--C-work-demo--', id, 'session.v3.jsonl')
     try {
       await readFile(path)
-      return path
     } catch {
       return undefined
     }
+    return { sourcePath: path, sourceVersion: 3, currentPath: path }
   }
   async readFirstLine(path) {
     const text = await readFile(path, 'utf8')
@@ -125,9 +126,9 @@ try {
 
   // seed one archived session
   const sid = 'test-session-0001'
-  const located = join(root, '--C-work-demo--', sid, 'session.jsonl')
+  const located = join(root, '--C-work-demo--', sid, 'session.v3.jsonl')
   await mkdir(dirname(located), { recursive: true })
-  await writeFile(located, `{"type":"session","version":1,"id":"${sid}","createdAt":1750000000000,"cwd":"C:\\\\work\\\\demo","delegationDepth":0}\n`)
+  await writeFile(located, `{"type":"session","version":3,"id":"${sid}","createdAt":1750000000000,"cwd":"C:\\\\work\\\\demo","delegationDepth":0,"isSeeded":false}\n`)
   registry.headers.set(sid, { id: sid, cwd: 'C:\\work\\demo' })
   registry.sessionPaths.set(sid, 'C:\\work\\demo')
   registry.state.archivedSessionIds.push(sid)

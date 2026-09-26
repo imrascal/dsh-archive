@@ -91,13 +91,20 @@ scripts/        eval-check.mjs（客户端 factory 求值校验）与 host-logic
 - **客户端双 store 重同步（0.2.2 修复）**：降级路径删除后，客户端现在**同时刷新 workspaces 与
   sessions 两个 store**。0.2.0/0.2.1 只刷新了工作区视图——已删会话残留在旧 sessions 列表、又
   不在任何工作区的 sessionIds 里 → 侧边栏把它渲染进**未分组**桶（直到下次整体刷新才消失）。
+- **存储形态容错（0.2.3 修复）**：宿主半不再假设日志的查找返回形态。旧宿主 `findLog` 返回路径
+  字符串，新宿主返回世代记录（`{ sourcePath, sourceVersion, currentPath }`）——按字符串使用会
+  让每次删除都失败在 `The "path" argument must be of type string. Received an instance of Object`，
+  且**在移动任何文件之前就中止**。会话目录内的日志同样改为**列目录取最高世代**，不再硬编码
+  `session.jsonl[.zstd]`：格式 v0 用该名字，之后每一代是 `session.vN.jsonl[.zstd]`（迁移过会话
+  格式的宿主存的是 `session.v3.jsonl.zstd`），同一目录可能两者并存。不改这一点，按世代命名的
+  回收站条目在「回收站列表 / 恢复」里会**看不见**。
 - 平台：Windows / macOS / Linux（回收站为纯 Node `fs` 实现，无平台假设）。
 
 ## 开发
 
 ```bash
 npm install                                # 拉取 @deepseek-ai/cordis devDependency
-node scripts/host-logic-test.mjs        # 宿主半全链路：删除→回收站→恢复→purge→清空→live 拒绝
+node scripts/host-logic-test.mjs        # 宿主半全链路：删除→回收站→恢复→purge→清空→live 拒绝；覆盖世代记录版 findLog 与两种日志命名（0.2.3）
 node scripts/host-robustness-test.mjs   # 晚到服务注入 + fail-closed 删除 + 路由按需补丁
 node scripts/cordis4-strict-test.mjs    # 真实 Cordis 4 严格注入回归测试（0.2.1 "without inject" 修复）
 node scripts/eval-check.mjs             # 客户端 bundle 求值 + apply + 插槽注册 + 晚到服务实时判定 + 双 store 重同步（0.2.2）

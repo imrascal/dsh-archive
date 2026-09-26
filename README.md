@@ -105,13 +105,23 @@ To migrate:
   workspaces and the sessions stores. 0.2.0/0.2.1 only refreshed the workspaces view, so the deleted
   session stayed in the stale sessions list while dropping out of every workspace — the sidebar then
   rendered it in the **Ungrouped** bucket (visible until the next full reload).
+- **Storage-shape tolerance (0.2.3)**: the host half no longer assumes how the session log is looked
+  up on disk. `findLog` returns a bare path string on older hosts but a generation record
+  (`{ sourcePath, sourceVersion, currentPath }`) on current ones — reading it as a string made every
+  delete fail with `The "path" argument must be of type string. Received an instance of Object`
+  before anything was removed. The log inside a session directory is likewise resolved by listing
+  the directory and preferring the highest generation, instead of hard-coding
+  `session.jsonl[.zstd]`: format v0 keeps that name, every later generation is
+  `session.vN.jsonl[.zstd]` (hosts that migrated their session format store
+  `session.v3.jsonl.zstd`), and a directory can hold both. Without that, trashed sessions written
+  under a versioned name were invisible to *trash list* / *restore*.
 - Platform: Windows / macOS / Linux (trash is plain Node `fs`; no platform assumptions).
 
 ## Development
 
 ```bash
 npm install                                # fetches the @deepseek-ai/cordis devDependency
-node scripts/host-logic-test.mjs        # host lifecycle: delete → trash → restore → purge → empty → live refusal
+node scripts/host-logic-test.mjs        # host lifecycle: delete → trash → restore → purge → empty → live refusal; covers the generation-record findLog shape and both log namings (0.2.3)
 node scripts/host-robustness-test.mjs   # late service provision + fail-closed delete + route on-demand ensure
 node scripts/cordis4-strict-test.mjs    # REAL Cordis 4 strict-inject regression (0.2.1: "without inject" fix)
 node scripts/eval-check.mjs             # client bundle factory eval + apply + slot registration + late-service detection + dual-store resync (0.2.2)

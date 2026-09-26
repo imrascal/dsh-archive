@@ -179,6 +179,43 @@ function ensureTrashPersistence(persistence, log) {
     if (persistence.compression === 'zstd') return persistence.readFirstZstdLine(path, signal)
     return persistence.readFirstLine(path, signal)
   }
+  // One session directory holds its log under the canonical generation name:
+  // `session.jsonl[.zstd]` while the format version is zero, and
+  // `session.vN.jsonl[.zstd]` for every later generation (hosts that migrated
+  // their format store `session.v3.jsonl.zstd`). Never assume the version-zero
+  // spelling — list the directory and prefer the highest generation.
+  const logNamePattern = () => new RegExp(`^session(?:\\.v(\\d+))?${logSuffix(persistence.compression).replace(/\./g, '\\.')}$`)
+  const listLogNames = async (dir, signal) => {
+    let entries
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch (error) {
+      if (isENOENT(error)) return []
+      throw error
+    }
+    signal?.throwIfAborted()
+    const pattern = logNamePattern()
+    const candidates = []
+    for (const entry of entries) {
+      const match = entry.isFile() ? pattern.exec(entry.name) : null
+      if (match === null) continue
+      candidates.push({ name: entry.name, version: Number(match[1] ?? 0) })
+    }
+    return candidates.sort((left, right) => right.version - left.version).map((candidate) => candidate.name)
+  }
+  /** Read one session directory's header line, newest generation first. */
+  const readDirHeader = async (dir, signal) => {
+    for (const name of await listLogNames(dir, signal)) {
+      try {
+        const first = await readFirstLine(join(dir, name), signal)
+        if (first !== undefined) return first
+      } catch {
+        if (signal?.aborted) signal.throwIfAborted()
+        // unreadable/corrupt generation — try the next candidate
+      }
+    }
+    return undefined
+  }
   const findTrashDir = async (id, signal) => {
     const prefix = `${encodeSegment(id)}-`
     let entries
@@ -194,7 +231,13 @@ function ensureTrashPersistence(persistence, log) {
   }
 
   persistence.remove = async function removeToTrash(id, signal) {
-    const path = await this.findLog(id, signal)
+    // `findLog` answers with a bare path on older hosts and with a generation
+    // record (`{ sourcePath, sourceVersion, currentPath }`) on current ones;
+    // taking the record for a path aborted every delete with
+    // `The "path" argument must be of type string. Received an instance of Object`
+    // — before anything was moved, so the session survived.
+    const selected = await this.findLog(id, signal)
+    const path = typeof selected === 'string' ? selected : selected?.sourcePath
     if (path === undefined) return
     await moveToTrash(dirname(path))
   }
@@ -216,13 +259,7 @@ function ensureTrashPersistence(persistence, log) {
       signal?.throwIfAborted()
       if (!entry.isDirectory()) continue
       const dir = join(root, entry.name)
-      const path = join(dir, `session${logSuffix(this.compression)}`)
-      let first
-      try {
-        first = await readFirstLine(path, signal)
-      } catch {
-        continue
-      }
+      const first = await readDirHeader(dir, signal)
       if (first === undefined) continue
       const meta = parseHeaderMeta(first)
       if (meta === undefined) continue
@@ -240,8 +277,7 @@ function ensureTrashPersistence(persistence, log) {
   persistence.trashRestore = async function trashRestore(id, signal) {
     const dir = await findTrashDir(id, signal)
     if (dir === undefined) return undefined
-    const path = join(dir, `session${logSuffix(this.compression)}`)
-    const first = await readFirstLine(path, signal)
+    const first = await readDirHeader(dir, signal)
     if (first === undefined) return undefined
     const meta = parseHeaderMeta(first)
     if (meta === undefined) return undefined

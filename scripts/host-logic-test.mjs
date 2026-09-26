@@ -17,20 +17,29 @@ const check = (name, cond, detail) => {
   }
 }
 
-// --- mock persistence (stock shape: NO trash support, remove hard-deletes) --
-// Mirrors the real on-disk layout: `$root/<projectKey>/<encodeSegment(id)>/session.jsonl`
-function makePersistence(root) {
-  const logPath = (id) => join(root, '--C-work-demo--', id, 'session.jsonl')
+// --- mock persistence ------------------------------------------------------
+// Mirrors the REAL current backend shape: `findLog` returns a generation
+// record (`{sourcePath, sourceVersion, currentPath}`), NOT a bare path, and a
+// session directory names its log after the format generation
+// (`session.v3.jsonl`). The earlier mock returned a plain `session.jsonl`
+// path string, which is exactly why the "path argument must be of type
+// string" crash shipped — keep both shapes covered below.
+const LOG_NAME = 'session.v3.jsonl'
+
+function makePersistence(root, { findLogShape = 'record', logName = LOG_NAME } = {}) {
+  const logPath = (id) => join(root, '--C-work-demo--', id, logName)
   const service = {
     root,
     compression: 'none',
     findLog: async (id) => {
+      const path = logPath(id)
       try {
-        await readFile(logPath(id))
-        return logPath(id)
+        await readFile(path)
       } catch {
         return undefined
       }
+      if (findLogShape === 'string') return path
+      return { sourcePath: path, sourceVersion: 3, currentPath: path }
     },
     readFirstLine: async (path) => {
       const text = await readFile(path, 'utf8')
@@ -100,17 +109,20 @@ function makeRegistry(persistence) {
 const base = await mkdtemp(join(tmpdir(), 'dsh-archive-test-'))
 const root = join(base, 'sessions')
 await mkdir(root, { recursive: true })
+const headerLine = (id, cwd) => `{"type":"session","version":3,"id":"${id}","createdAt":1750000000000,"cwd":"${cwd}","delegationDepth":0,"isSeeded":false}\n`
+const seed = async (dir_root, id, name, cwd = 'C:\\\\work\\\\demo') => {
+  const dir = join(dir_root, '--C-work-demo--', id)
+  await mkdir(dir, { recursive: true })
+  await writeFile(join(dir, name), headerLine(id, cwd))
+  return dir
+}
 try {
   const persistence = makePersistence(root)
   const registry = makeRegistry(persistence)
 
   // seed one session, then archive it
   const sid = 'test-session-0001'
-  await mkdir(join(root, '--C-work-demo--', sid), { recursive: true })
-  await writeFile(
-    join(root, '--C-work-demo--', sid, 'session.jsonl'),
-    `{"type":"session","version":1,"id":"${sid}","createdAt":1750000000000,"cwd":"C:\\\\work\\\\demo","delegationDepth":0}\n`,
-  )
+  await seed(root, sid, LOG_NAME)
   await registry.archiveSession(sid)
   check('seed: session archived', registry.archivedSessionIds.includes(sid))
 
@@ -159,14 +171,25 @@ try {
   check('trashRestore: artifact back in live store', liveBack !== undefined)
   check('trashRestore: trash emptied for that id', (await readdir(trashRoot)).length === 0)
 
+  // generation naming: a directory that kept both the version-zero log and the
+  // current generation must be read from the newest one
+  const mixed = 'test-session-mixed'
+  const mixedDir = await seed(root, mixed, 'session.jsonl', 'C:\\\\work\\\\stale')
+  await writeFile(join(mixedDir, LOG_NAME), headerLine(mixed, 'C:\\\\work\\\\demo'))
+  await registry.archiveSession(mixed)
+  await registry.deleteSession(mixed)
+  const mixedRow = (await persistence.trashList()).find((row) => row.sessionId === mixed)
+  check('trashList: the newest generation wins over the legacy v0 log', mixedRow !== undefined && mixedRow.cwd === 'C:\\work\\demo', JSON.stringify(mixedRow))
+  await registry.trashRestore(mixed)
+  check('trashRestore: both generations survive the round trip', (await readdir(mixedDir)).length === 2)
+
   // delete again, then purge
   await registry.deleteSession(sid)
   await registry.trashPurge(sid)
   check('trashPurge: trashed dir removed', (await readdir(trashRoot)).length === 0)
 
   // recreate the session, delete again, then trashEmpty
-  await mkdir(join(root, '--C-work-demo--', sid), { recursive: true })
-  await writeFile(join(root, '--C-work-demo--', sid, 'session.jsonl'), `{"type":"session","version":1,"id":"${sid}","createdAt":1750000000000,"cwd":"C:\\\\work\\\\demo","delegationDepth":0}\n`)
+  await seed(root, sid, LOG_NAME)
   await registry.archiveSession(sid)
   await registry.deleteSession(sid)
   await registry.trashEmpty()
@@ -174,8 +197,7 @@ try {
 
   // live-session refusal
   registry.ctx.get = () => ({ get: (id) => (id === sid ? {} : undefined) })
-  await mkdir(join(root, '--C-work-demo--', sid), { recursive: true })
-  await writeFile(join(root, '--C-work-demo--', sid, 'session.jsonl'), `{"type":"session","version":1,"id":"${sid}","createdAt":1750000000000,"cwd":"C:\\\\work\\\\demo","delegationDepth":0}\n`)
+  await seed(root, sid, LOG_NAME)
   let liveError = null
   try {
     await registry.deleteSession(sid)
@@ -193,6 +215,29 @@ try {
     unknownError = error
   }
   check('delete: unknown session refused with session-not-found', unknownError !== null && unknownError.code === 'session-not-found')
+
+  // legacy host: `findLog` returns the bare path string and logs keep the
+  // version-zero name — the same delete path must still work
+  const legacyRoot = join(base, 'legacy-sessions')
+  await mkdir(legacyRoot, { recursive: true })
+  const legacyPersistence = makePersistence(legacyRoot, { findLogShape: 'string', logName: 'session.jsonl' })
+  const legacyRegistry = makeRegistry(legacyPersistence)
+  apply({
+    get(name) {
+      if (name === 'sessionPersistence') return legacyPersistence
+      if (name === 'workspaceRegistry') return legacyRegistry
+      return undefined
+    },
+    logger: { info: (m) => logs.push(m), warn: (m) => logs.push(m) },
+  })
+  const legacyId = 'test-session-legacy'
+  await seed(legacyRoot, legacyId, 'session.jsonl')
+  await legacyRegistry.archiveSession(legacyId)
+  await legacyRegistry.deleteSession(legacyId)
+  const legacyRows = await legacyPersistence.trashList()
+  check('legacy host: string-shaped findLog still deletes and lists', legacyRows.length === 1 && legacyRows[0].sessionId === legacyId, JSON.stringify(legacyRows))
+  await legacyPersistence.trashRestore(legacyId)
+  check('legacy host: string-shaped findLog still restores', (await legacyPersistence.findLog(legacyId)) !== undefined)
 
   console.log('\n[host logs]')
   for (const line of logs) console.log('  ' + line)
