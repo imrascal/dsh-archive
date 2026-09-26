@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.4
+
+- fix: feature-detect the workspace-registry archive API per method instead of assuming that a
+  native `unarchiveSession` means the whole API exists. DSH 0.1.7-rc.1 ships
+  `archiveSession`/`unarchiveSession` upstream but no `deleteSession` and no trash layer, so the
+  plugin skipped its patch and the fallback route answered the browser with
+  `workspace registry backend is not available yet` — deleting an archived session failed. Missing
+  methods are now filled in one by one and native ones are never replaced
+- fix: treat ANY native trash method on the persistence backend as "the backend owns the trash
+  layer" (take the whole layer or none of it) instead of only checking `trashList`
+
 ## 0.2.3
 
 - fix: accept the generation record returned by `findLog` (`findLog` is no longer assumed to be a

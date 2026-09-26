@@ -85,12 +85,19 @@ To migrate:
   **desktop GUI** (Electron window), which share the same host services and client bundle.
 - Stock hosts (rc.5 unpatched, rc.6): the host half adds the trash layer and the registry API at
   runtime; the client falls back to `/dsh-archive/session`.
-- Hosts that already carry the feature — rc.5 with the in-box patches, and **rc.7+ where upstream
-  merged the same backend** (persistence trash layer, registry `unarchiveSession/deleteSession/
+- Hosts that already carry the feature — rc.5 with the in-box patches, and hosts where upstream
+  merged the same backend (persistence trash layer, registry `unarchiveSession/deleteSession/
   trash*`, API-proxy routes, client-runtime methods): every step feature-detects and no-ops; the
   client calls the native `ctx.workspaces` API directly. Service availability is checked per call,
-  so a service that is provided late (rc.7 gates the registry behind an inject) is picked up
-  automatically instead of stranding the section on the fallback path.
+  so a service that is provided late is picked up automatically instead of stranding the section on
+  the fallback path.
+- **Partial native archive API (0.2.4)**: upstream ships the registry API piecemeal — DSH
+  `0.1.7-rc.1` has `archiveSession`/`unarchiveSession` natively but no `deleteSession` and no trash
+  layer at all. The plugin now feature-detects every method on its own: it fills exactly the gaps
+  (here: `deleteSession` + `trashList/trashRestore/trashPurge/trashEmpty` plus the persistence trash
+  layer) and never replaces a native method. 0.2.3 and earlier treated a native `unarchiveSession`
+  as proof that the whole API existed, skipped the patch, and every delete failed with
+  `workspace registry backend is not available yet`.
 - `deleteSession` is **fail-closed**: it refuses to run unless the persistence layer is trash-aware,
   so the plugin can never drive a stock hard-delete backend (nothing is removed on refusal).
 - Host half shape-guards every patch; unrecognized services are skipped with a log line, never fatal.

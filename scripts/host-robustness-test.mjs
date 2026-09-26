@@ -29,7 +29,7 @@ function makePersistence(root, { withTrash = false } = {}) {
     compression: 'none',
     // current hosts answer with a generation record, not a bare path
     findLog: async (id) => {
-      const p = join(root, '--C-work--demo--', id, 'session.v3.jsonl')
+      const p = join(root, '--C-work-demo--', id, 'session.v3.jsonl')
       try {
         await readFile(p)
       } catch {
@@ -40,7 +40,7 @@ function makePersistence(root, { withTrash = false } = {}) {
     readFirstLine: async (p) => (await readFile(p, 'utf8')).split('\n')[0],
     remove: async (id) => {
       // stock (hard) remove — must never be reached by the plugin
-      await rm(join(root, '--C-work--demo--', id), { recursive: true, force: true })
+      await rm(join(root, '--C-work-demo--', id), { recursive: true, force: true })
     },
   }
   if (withTrash) {
@@ -65,9 +65,9 @@ function makePersistence(root, { withTrash = false } = {}) {
   return service
 }
 
-function makeRegistry(persistence, { live = false } = {}) {
+function makeRegistry(persistence, { live = false, nativeArchiveApi = false } = {}) {
   const archived = []
-  return {
+  const registry = {
     archivedSessionIds: archived,
     headers: new Map(),
     entities: new Map(),
@@ -95,6 +95,17 @@ function makeRegistry(persistence, { live = false } = {}) {
       return Promise.resolve()
     },
   }
+  if (nativeArchiveApi) {
+    // hosts that ship PART of the archive API (0.1.7-rc.1: unarchiveSession and
+    // archiveSession exist upstream, deleteSession and the trash layer do not)
+    registry.unarchiveSession = function unarchiveSession(sessionId) {
+      return this.enqueueOperation(async () => {
+        if (!archived.includes(sessionId)) return
+        await this.setState({ archivedSessionIds: archived.filter((id) => id !== sessionId) })
+      })
+    }
+  }
+  return registry
 }
 
 // ---------------------------------------------------------------------------
@@ -143,8 +154,8 @@ console.log('--- fail-closed delete ---')
   const persistence = makePersistence(root, { withTrash: false })
   const registry = makeRegistry(persistence)
   const sid = 'sid-fc-1'
-  await mkdir(join(root, '--C-work--demo--', sid), { recursive: true })
-  await writeFile(join(root, '--C-work--demo--', sid, 'session.v3.jsonl'), `{"type":"session","version":3,"id":"${sid}","createdAt":1750000000000,"cwd":"C:\\\\work\\\\demo","delegationDepth":0,"isSeeded":false}\n`)
+  await mkdir(join(root, '--C-work-demo--', sid), { recursive: true })
+  await writeFile(join(root, '--C-work-demo--', sid, 'session.v3.jsonl'), `{"type":"session","version":3,"id":"${sid}","createdAt":1750000000000,"cwd":"C:\\\\work\\\\demo","delegationDepth":0,"isSeeded":false}\n`)
   await registry.archiveSession(sid)
   // persistence that can never be trash-aware: remove its findLog (shape guard fails)
   persistence.findLog = undefined
@@ -159,7 +170,7 @@ console.log('--- fail-closed delete ---')
     error = e
   }
   check('deleteSession refused with unavailable', error !== null && error.code === 'unavailable')
-  const stillThere = await readFile(join(root, '--C-work--demo--', sid, 'session.v3.jsonl')).then(() => true).catch(() => false)
+  const stillThere = await readFile(join(root, '--C-work-demo--', sid, 'session.v3.jsonl')).then(() => true).catch(() => false)
   check('session artifact untouched (no hard delete)', stillThere)
   await rm(dirname(root), { recursive: true, force: true })
 }
@@ -216,6 +227,71 @@ console.log('--- fallback route on-demand ensure ---')
 
   const bad = await post({ op: 'nonsense' })
   check('unknown op → 400 bad-request', bad.status === 400 && bad.body.code === 'bad-request')
+  await rm(dirname(root), { recursive: true, force: true })
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 4: the host ships HALF the archive API (0.1.7-rc.1 regression)
+// ---------------------------------------------------------------------------
+// 0.1.7-rc.1 provides archiveSession/unarchiveSession upstream but no
+// deleteSession and no trash layer. A blanket "unarchiveSession exists, so the
+// whole API exists" guard skipped the patch, the route then found no
+// `trashList`, and every delete answered
+// `workspace registry backend is not available yet`.
+console.log('--- partial native archive API ---')
+{
+  const root = join(await mkdtemp(join(tmpdir(), 'dsh-partial-')), 'sessions')
+  await mkdir(root, { recursive: true })
+  const persistence = makePersistence(root)
+  const registry = makeRegistry(persistence, { nativeArchiveApi: true })
+  const nativeUnarchive = registry.unarchiveSession
+
+  let handler = null
+  apply({
+    get: (n) => (n === 'sessionPersistence' ? persistence : n === 'workspaceRegistry' ? registry : undefined),
+    logger: { info: () => {}, warn: () => {} },
+    inject(services, cb) {
+      if (services[0] === 'webServer') cb({ webServer: { register: (entry) => { handler = entry.handler } } })
+      else cb()
+    },
+  })
+
+  check('native unarchiveSession is left untouched', registry.unarchiveSession === nativeUnarchive)
+  check('missing deleteSession added', typeof registry.deleteSession === 'function')
+  check('missing trash API added', typeof registry.trashList === 'function' && typeof registry.trashRestore === 'function' && typeof registry.trashPurge === 'function' && typeof registry.trashEmpty === 'function')
+
+  const post = (body) => {
+    const req = {
+      method: 'POST',
+      [Symbol.asyncIterator]() {
+        const chunks = [Buffer.from(JSON.stringify(body))]
+        let i = 0
+        return { next: async () => (i < chunks.length ? { value: chunks[i++], done: false } : { done: true }) }
+      },
+    }
+    let status = 0
+    let text = ''
+    const res = {
+      writeHead(s) { status = s },
+      end(b) { text = b },
+    }
+    return handler(req, res).then(() => ({ status, body: JSON.parse(text) }))
+  }
+
+  const list = await post({ op: 'trashList' })
+  check('trashList on a partial host → 200 (not 503)', list.status === 200 && list.body.ok === true, JSON.stringify(list.body))
+
+  const sid = 'partial-sid-1'
+  // projectKey('C:\work\demo') collapses the separator run to `--C-work-demo--`
+  await mkdir(join(root, '--C-work-demo--', sid), { recursive: true })
+  await writeFile(join(root, '--C-work-demo--', sid, 'session.v3.jsonl'), `{"type":"session","version":3,"id":"${sid}","createdAt":1750000000000,"cwd":"C:\\\\work\\\\demo","delegationDepth":0,"isSeeded":false}\n`)
+  await registry.archiveSession(sid)
+  const deleted = await post({ op: 'delete', sessionId: sid })
+  check('delete on a partial host → moved to trash', deleted.body.ok === true && deleted.body.value.deleted === true, JSON.stringify(deleted.body))
+  const rows = await persistence.trashList()
+  check('the deleted session is listed in the trash', rows.some((row) => row.sessionId === sid), JSON.stringify(rows))
+  const restored = await post({ op: 'trashRestore', sessionId: sid })
+  check('restore on a partial host → back in the live store', restored.body.ok === true && (await persistence.findLog(sid)) !== undefined, JSON.stringify(restored.body))
   await rm(dirname(root), { recursive: true, force: true })
 }
 

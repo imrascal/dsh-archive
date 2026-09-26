@@ -76,9 +76,15 @@ scripts/        eval-check.mjs（客户端 factory 求值校验）与 host-logic
   （Electron 窗口）——两者共用同一套宿主服务与客户端 bundle，一份实现双端生效。
 - 原版宿主（rc.5 未打补丁 / rc.6）：宿主半运行时补齐回收站层与 registry API；客户端走
   `/dsh-archive/session` 降级接口。
-- 自带该功能的宿主——rc.5 打了内置补丁的，以及 **rc.7+（上游已原生合并同一套后端）**：所有
-  步骤自动检测并 no-op；客户端直连原生 `ctx.workspaces` API。原生能力**每次调用实时判定**，
-  服务晚到（rc.7 把 registry 放在 inject 门后）也会自动切回原生，不会永远卡在降级路径。
+- 自带该功能的宿主——rc.5 打了内置补丁的，以及上游已原生合并同一套后端的宿主：所有步骤自动
+  检测并 no-op；客户端直连原生 `ctx.workspaces` API。原生能力**每次调用实时判定**，服务晚到
+  （registry 放在 inject 门后）也会自动切回原生，不会永远卡在降级路径。
+- **原生 API 只带一半（0.2.4 修复）**：上游是**逐个方法**补齐 registry API 的——DSH
+  `0.1.7-rc.1` 原生有 `archiveSession`/`unarchiveSession`，但**没有** `deleteSession`，persistence
+  也完全没有回收站层。插件现在**逐方法**特征检测：只补缺失的那几个（这里是 `deleteSession` +
+  `trashList/trashRestore/trashPurge/trashEmpty` 与 persistence 回收站层），原生方法一律不覆盖。
+  0.2.3 及更早把「有 `unarchiveSession`」当成「整套 API 都在」，直接跳过补丁 → 每次删除都报
+  `workspace registry backend is not available yet`。
 - `deleteSession` 采用 **fail-closed**：persistence 不具备回收站能力时拒绝删除（不删任何东西），
   插件永远不会驱动官方硬删除后端。
 - 宿主半对每个补丁都有形状守卫，遇到不认识的形态安全跳过并打日志，不会拖垮应用。

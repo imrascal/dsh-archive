@@ -155,11 +155,17 @@ function parseHeaderMeta(firstLine) {
 // 1. Session-persistence trash layer
 // ---------------------------------------------------------------------------
 
+/** Every method the trash layer installs on the persistence service. */
+const TRASH_METHODS = ['trashRoot', 'trashDirName', 'moveToTrash', 'findTrashDir', 'trashList', 'trashRestore', 'trashPurge', 'trashEmpty']
+
 /** Patch a JsonlSessionPersistence-like service with trash support (idempotent). */
 function ensureTrashPersistence(persistence, log) {
   if (!persistence || typeof persistence !== 'object') return false
-  if (typeof persistence.trashList === 'function') {
-    log('[dsh-archive] persistence already has trash support — nothing to patch')
+  // Any native trash method means the backend owns a trash layer of its own:
+  // take the whole layer or none of it, never mix two on-disk layouts.
+  const nativeTrash = TRASH_METHODS.filter((name) => typeof persistence[name] === 'function')
+  if (nativeTrash.length > 0) {
+    log(`[dsh-archive] persistence already has trash support (${nativeTrash.join(' / ')}) — nothing to patch`)
     return false
   }
   if (typeof persistence.findLog !== 'function' || typeof persistence.root !== 'string') {
@@ -336,10 +342,6 @@ function businessError(code, message, sessionId) {
  */
 function ensureRegistryApi(registry, log, hooks = {}) {
   if (!registry || typeof registry !== 'object') return false
-  if (typeof registry.unarchiveSession === 'function') {
-    log('[dsh-archive] workspaceRegistry already has the archive-manager API — nothing to patch')
-    return false
-  }
   if (typeof registry.enqueueOperation !== 'function' || typeof registry.sessionKnown !== 'function') {
     log(`[dsh-archive] workspaceRegistry shape unrecognized (enqueueOperation=${typeof registry.enqueueOperation}, sessionKnown=${typeof registry.sessionKnown}) — skipping API patch`)
     return false
@@ -364,82 +366,101 @@ function ensureRegistryApi(registry, log, hooks = {}) {
     return persistence !== undefined && typeof persistence.trashList === 'function'
   }
 
-  registry.unarchiveSession = function unarchiveSession(sessionId) {
-    return this.enqueueOperation(async () => {
-      const state = this.requireState()
-      if (!state.archivedSessionIds.includes(sessionId)) return
-      if (!(await this.sessionKnown(sessionId))) {
-        throw businessError('session-not-found', `unknown session '${sessionId}'`, sessionId)
-      }
-      await this.setState({
-        ...state,
-        archivedSessionIds: state.archivedSessionIds.filter((id) => id !== sessionId),
-      })
-    })
-  }
-
-  registry.deleteSession = function deleteSession(sessionId) {
-    return this.enqueueOperation(async () => {
-      // Fail-closed: never drive a hard-delete backend. Ensure the trash
-      // layer first; refuse when it cannot be established. Pass `this` so
-      // `ensureTrash` resolves services through the method receiver's ctx
-      // (see the note in ensureTrash).
-      if (!ensureTrash(this)) {
-        throw businessError(
-          'unavailable',
-          'trash backend unavailable — refusing to delete session (nothing was removed); the session-persistence service lacks trash support',
-          sessionId,
-        )
-      }
-      if (this.ctx?.get('sessions')?.get(sessionId) !== undefined) {
-        throw businessError('session-live', `cannot delete session '${sessionId}': the session is live; stop or detach it before deleting`, sessionId)
-      }
-      if (!(await this.sessionKnown(sessionId))) {
-        throw businessError('session-not-found', `unknown session '${sessionId}'`, sessionId)
-      }
-      await this.ctx.sessionPersistence.remove(sessionId)
-      for (const entity of this.entities.values()) {
-        if (entity.record.sessionIds.includes(sessionId)) await entity.detachSession(sessionId)
-      }
-      const state = this.requireState()
-      if (state.archivedSessionIds.includes(sessionId)) {
+  const additions = {
+    unarchiveSession: function unarchiveSession(sessionId) {
+      return this.enqueueOperation(async () => {
+        const state = this.requireState()
+        if (!state.archivedSessionIds.includes(sessionId)) return
+        if (!(await this.sessionKnown(sessionId))) {
+          throw businessError('session-not-found', `unknown session '${sessionId}'`, sessionId)
+        }
         await this.setState({
           ...state,
           archivedSessionIds: state.archivedSessionIds.filter((id) => id !== sessionId),
         })
+      })
+    },
+
+    deleteSession: function deleteSession(sessionId) {
+      return this.enqueueOperation(async () => {
+        // Fail-closed: never drive a hard-delete backend. Ensure the trash
+        // layer first; refuse when it cannot be established. Pass `this` so
+        // `ensureTrash` resolves services through the method receiver's ctx
+        // (see the note in ensureTrash).
+        if (!ensureTrash(this)) {
+          throw businessError(
+            'unavailable',
+            'trash backend unavailable — refusing to delete session (nothing was removed); the session-persistence service lacks trash support',
+            sessionId,
+          )
+        }
+        if (this.ctx?.get('sessions')?.get(sessionId) !== undefined) {
+          throw businessError('session-live', `cannot delete session '${sessionId}': the session is live; stop or detach it before deleting`, sessionId)
+        }
+        if (!(await this.sessionKnown(sessionId))) {
+          throw businessError('session-not-found', `unknown session '${sessionId}'`, sessionId)
+        }
+        await this.ctx.sessionPersistence.remove(sessionId)
+        for (const entity of this.entities.values()) {
+          if (entity.record.sessionIds.includes(sessionId)) await entity.detachSession(sessionId)
+        }
+        const state = this.requireState()
+        if (state.archivedSessionIds.includes(sessionId)) {
+          await this.setState({
+            ...state,
+            archivedSessionIds: state.archivedSessionIds.filter((id) => id !== sessionId),
+          })
+        }
+        this.headers.delete(sessionId)
+        this.sessionPaths.delete(sessionId)
+        this.invalidSessionPaths.delete(sessionId)
+        this.ctx?.emit?.('workspace/session-deleted', sessionId)
+      })
+    },
+
+    trashList: async function trashList() {
+      return this.ctx.sessionPersistence.trashList()
+    },
+
+    trashRestore: async function trashRestore(sessionId) {
+      const header = await this.ctx.sessionPersistence.trashRestore(sessionId)
+      if (header === undefined) {
+        throw businessError('session-not-found', `no such trashed session '${sessionId}'`, sessionId)
       }
-      this.headers.delete(sessionId)
-      this.sessionPaths.delete(sessionId)
+      this.headers.set(sessionId, header)
+      this.sessionPaths.set(sessionId, header.cwd)
       this.invalidSessionPaths.delete(sessionId)
-      this.ctx?.emit?.('workspace/session-deleted', sessionId)
-    })
+      this.ctx?.emit?.('workspace/session-restored', sessionId)
+      return header
+    },
+
+    trashPurge: async function trashPurge(sessionId) {
+      return this.ctx.sessionPersistence.trashPurge(sessionId)
+    },
+
+    trashEmpty: async function trashEmpty() {
+      return this.ctx.sessionPersistence.trashEmpty()
+    },
   }
 
-  registry.trashList = async function trashList() {
-    return this.ctx.sessionPersistence.trashList()
+  // Feature-detect EVERY method on its own. Upstream ships the archive API
+  // piecemeal — 0.1.7-rc.1 has archiveSession/unarchiveSession natively but no
+  // deleteSession and no trash layer at all — and a blanket "unarchiveSession
+  // exists, so the whole API exists" guard skipped the patch entirely. The
+  // fallback route then found no `trashList` and answered the client with
+  // `workspace registry backend is not available yet`, so deleting an archived
+  // session failed. Native methods are never replaced; only gaps are filled.
+  const added = []
+  for (const [name, method] of Object.entries(additions)) {
+    if (typeof registry[name] === 'function') continue
+    registry[name] = method
+    added.push(name)
   }
-
-  registry.trashRestore = async function trashRestore(sessionId) {
-    const header = await this.ctx.sessionPersistence.trashRestore(sessionId)
-    if (header === undefined) {
-      throw businessError('session-not-found', `no such trashed session '${sessionId}'`, sessionId)
-    }
-    this.headers.set(sessionId, header)
-    this.sessionPaths.set(sessionId, header.cwd)
-    this.invalidSessionPaths.delete(sessionId)
-    this.ctx?.emit?.('workspace/session-restored', sessionId)
-    return header
+  if (added.length === 0) {
+    log('[dsh-archive] workspaceRegistry already has the archive-manager API — nothing to patch')
+    return false
   }
-
-  registry.trashPurge = async function trashPurge(sessionId) {
-    return this.ctx.sessionPersistence.trashPurge(sessionId)
-  }
-
-  registry.trashEmpty = async function trashEmpty() {
-    return this.ctx.sessionPersistence.trashEmpty()
-  }
-
-  log('[dsh-archive] patched workspaceRegistry: unarchiveSession / deleteSession / trashList / trashRestore / trashPurge / trashEmpty added (deleteSession is fail-closed on the trash layer)')
+  log(`[dsh-archive] patched workspaceRegistry: added ${added.join(' / ')} (deleteSession is fail-closed on the trash layer)`)
   return true
 }
 
